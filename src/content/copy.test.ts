@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { collectProblems } from '../../scripts/check-assets'
+import { collectProblems } from '../assets/check'
 import { allCards, allEvents, visibleCards } from './text'
 import { EVENT_ACTIONS, catalogEvents } from '../sim/events'
 

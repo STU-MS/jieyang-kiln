@@ -1,15 +1,15 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import clay from '../src/data/clay.json'
-import glaze from '../src/data/glaze.json'
-import climate from '../src/data/climate.json'
-import lines from '../src/content/master-lines.json'
-import glossary from '../src/content/glossary.json'
-import { manifest, referencedAssetIds } from '../src/assets/manifest'
-import { hasText } from '../src/content/text'
+import clay from '../data/clay.json'
+import glaze from '../data/glaze.json'
+import climate from '../data/climate.json'
+import lines from '../content/master-lines.json'
+import glossary from '../content/glossary.json'
+import { manifest, referencedAssetIds } from './manifest'
+import { hasText } from '../content/text'
 
-const root = fileURLToPath(new URL('..', import.meta.url))
+const root = fileURLToPath(new URL('../..', import.meta.url))
 const srcDir = join(root, 'src')
 const contentDir = join(srcDir, 'content')
 
@@ -81,14 +81,4 @@ export function collectProblems(): string[] {
     }
   }
   return problems
-}
-
-const invoked = process.argv[1]?.replace(/\\/g, '/').includes('scripts/check-assets')
-if (invoked) {
-  const problems = collectProblems()
-  if (problems.length) {
-    for (const problem of problems) console.error(problem)
-    process.exit(1)
-  }
-  console.log(`资产与文案检查通过，清单 ${manifest.length} 条`)
 }
