@@ -1,4 +1,5 @@
-# 发布自动化：push main → GitHub Pages；push tag v* → Release + 独立运行压缩包
+# 发布自动化：每次推 main → 先跑门禁，再并行产出 GitHub Pages 与时间戳 Release
+# Release 无需手动打 tag：tag 名 = v + UTC 完整时间戳，由本工作流自动生成并推送。
 # 门禁与 CI 同一套（docs/testing.md「门禁」）；发布动作本身不在 PR 上跑。
 
 name: Release
@@ -6,20 +7,19 @@ name: Release
 on:
   push:
     branches: [main]
-    tags: ['v*']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: write # tag 路径发 Release 用
-  pages: write # main 路径部署 Pages 用
+  contents: write # 发 Release、推时间戳 tag 用
+  pages: write # 部署 Pages 用
   id-token: write # Pages 的 OIDC
 
 jobs:
   gate:
-    # 两个入口共用同一套四段门禁，全绿才允许产出
+    # 四段门禁，全绿才允许产出
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,8 +35,7 @@ jobs:
       - run: pnpm test
 
   pages:
-    # push main → 部署 GitHub Pages
-    if: github.ref == 'refs/heads/main'
+    # 部署 GitHub Pages
     needs: gate
     runs-on: ubuntu-latest
     environment:
@@ -59,10 +58,11 @@ jobs:
         uses: actions/deploy-pages@v4
 
   release:
-    # push tag v* → Release + 独立运行压缩包
-    if: startsWith(github.ref, 'refs/tags/v')
+    # 发时间戳 Release + 独立运行压缩包（tag = v + UTC 完整时间戳，自动生成）
     needs: gate
     runs-on: ubuntu-latest
+    env:
+      TAG: v$(date -u +%Y%m%d%H%M%S)
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -72,17 +72,24 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      - name: 推时间戳 tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$TAG"
+          git push origin "$TAG"
       - name: 打包独立运行压缩包
         run: |
           cd dist
-          zip -r "../jieyang-kiln-${GITHUB_REF_NAME}.zip" .
+          zip -r "../jieyang-kiln-${TAG}.zip" .
           cd ..
-          unzip -l "jieyang-kiln-${GITHUB_REF_NAME}.zip"
+          unzip -l "jieyang-kiln-${TAG}.zip"
       - name: 发 Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "jieyang-kiln $GITHUB_REF_NAME" \
-            --notes "下载下方压缩包，解压后任意静态服务器（如 \`npx serve\`、\`python3 -m http.server\`）打开即是完整游戏。" \
-            "jieyang-kiln-${GITHUB_REF_NAME}.zip"
+          gh release create "$TAG" \
+            --title "jieyang-kiln $TAG" \
+            --notes "自动构建于 $(date -u '+%Y-%m-%d %H:%M:%S UTC') · commit $GITHUB_SHA
+          下载下方压缩包，解压后任意静态服务器（如 \`npx serve\`、\`python3 -m http.server\`）打开即是完整游戏。" \
+            "jieyang-kiln-${TAG}.zip"
