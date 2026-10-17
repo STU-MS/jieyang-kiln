@@ -1,0 +1,88 @@
+# 发布自动化：push main → GitHub Pages；push tag v* → Release + 独立运行压缩包
+# 门禁与 CI 同一套（docs/testing.md「门禁」）；发布动作本身不在 PR 上跑。
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # tag 路径发 Release 用
+  pages: write # main 路径部署 Pages 用
+  id-token: write # Pages 的 OIDC
+
+jobs:
+  gate:
+    # 两个入口共用同一套四段门禁，全绿才允许产出
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        # 版本来自 package.json 的 packageManager 字段
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm test
+
+  pages:
+    # push main → 部署 GitHub Pages
+    if: github.ref == 'refs/heads/main'
+    needs: gate
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  release:
+    # push tag v* → Release + 独立运行压缩包
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: 打包独立运行压缩包
+        run: |
+          cd dist
+          zip -r "../jieyang-kiln-${GITHUB_REF_NAME}.zip" .
+          cd ..
+          unzip -l "jieyang-kiln-${GITHUB_REF_NAME}.zip"
+      - name: 发 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "jieyang-kiln $GITHUB_REF_NAME" \
+            --notes "下载下方压缩包，解压后任意静态服务器（如 \`npx serve\`、\`python3 -m http.server\`）打开即是完整游戏。" \
+            "jieyang-kiln-${GITHUB_REF_NAME}.zip"
