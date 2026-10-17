@@ -39,12 +39,14 @@ A 3–8 minute browser game: mix the clay, throw the cup, dry and bisque it, gla
 ```bash
 pnpm install
 pnpm dev            # 启动开发服务器
-pnpm test           # 运行 Vitest 测试
-pnpm build          # 类型检查 + 产物构建
-pnpm check:assets   # 校验资产清单
+pnpm test           # 运行 Vitest 测试（含资产/文案清单校验）
+pnpm typecheck      # 类型检查
+pnpm build          # 产物构建
 ```
 
-要求：Node.js ≥ 18，pnpm ≥ 8。浏览器要求 Chrome / Edge ≥ 110、Safari ≥ 16、Firefox ≥ 110（WebGL 2）。
+要求：Node.js ≥ 22，pnpm ≥ 11。浏览器要求 Chrome / Edge ≥ 110、Safari ≥ 16、Firefox ≥ 110（WebGL 2）。
+
+> 开发规范见 [AGENTS.md](AGENTS.md) 与 [docs/testing.md](docs/testing.md)：改动一律走 PR，四段门禁（install / typecheck / build / test）本地与 CI 同一套，测试测行为不测实现。
 
 ## 目录结构
 
