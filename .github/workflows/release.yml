@@ -61,10 +61,10 @@ jobs:
     # 发时间戳 Release + 独立运行压缩包（tag = v + UTC 完整时间戳，自动生成）
     needs: gate
     runs-on: ubuntu-latest
-    env:
-      TAG: v$(date -u +%Y%m%d%H%M%S)
     steps:
       - uses: actions/checkout@v4
+      - name: 生成时间戳 tag
+        run: echo "TAG=v$(date -u +%Y%m%d%H%M%S)" >> "$GITHUB_ENV"
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
