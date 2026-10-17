@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "sourceNote": "基础湿度按揭阳气象站 2001—2020 年公开资料取整，只作游戏数值，不可当作气象结论引用。",
+  "referenceHumidity": 70,
+  "seasons": [
+    {
+      "id": "spring",
+      "name": "春季",
+      "months": [2, 3, 4],
+      "humidity": [78, 88],
+      "temperature": [15, 22],
+      "dryScale": 1.35,
+      "bandScale": 0.7,
+      "crackBonus": 0,
+      "blurb": "低温阴雨、回南天。阴干最慢，新手不妨等秋天再开第一窑。"
+    },
+    {
+      "id": "preFlood",
+      "name": "前汛期",
+      "months": [5, 6],
+      "humidity": [80, 90],
+      "temperature": [25, 28],
+      "dryScale": 1.25,
+      "bandScale": 0.8,
+      "crackBonus": 0,
+      "blurb": "龙舟水。翻面和遮盖可以多用一次，湿度上限最高。"
+    },
+    {
+      "id": "summer",
+      "name": "盛夏",
+      "months": [7, 8, 9],
+      "humidity": [73, 85],
+      "temperature": [28, 33],
+      "dryScale": 1.05,
+      "bandScale": 1,
+      "crackBonus": 0,
+      "blurb": "蒸发快，突雨也密。干得不匀时，别用风直吹。"
+    },
+    {
+      "id": "autumn",
+      "name": "秋季",
+      "months": [10, 11],
+      "humidity": [60, 73],
+      "temperature": [22, 27],
+      "dryScale": 0.85,
+      "bandScale": 1,
+      "crackBonus": 0,
+      "blurb": "晴多雨少。第一只杯子，适合从这个季节开始。"
+    },
+    {
+      "id": "winter",
+      "name": "冬季",
+      "months": [12, 1],
+      "humidity": [55, 70],
+      "temperature": [12, 18],
+      "dryScale": 0.9,
+      "bandScale": 1,
+      "crackBonus": 0.05,
+      "blurb": "北风干，昼夜温差大。坯体收得不匀，开裂要多留神。"
+    }
+  ],
+  "weathers": [
+    { "id": "sunny", "name": "晴", "humidityAdd": -4, "tempAdd": 1, "sky": "env.sky.sunny", "coverScale": 1 },
+    { "id": "cloudy", "name": "多云", "humidityAdd": 0, "tempAdd": 0, "sky": "env.sky.cloudy", "coverScale": 1 },
+    { "id": "overcast", "name": "阴", "humidityAdd": 3, "tempAdd": -1, "sky": "env.sky.overcast", "coverScale": 1 },
+    { "id": "rain", "name": "雨", "humidityAdd": 8, "tempAdd": -2, "sky": "env.sky.rain", "coverScale": 1 },
+    { "id": "returningSouth", "name": "回南天", "humidityAdd": 10, "tempAdd": 0, "sky": "env.sky.returningSouth", "coverScale": 0.5 },
+    { "id": "coldAir", "name": "冷空气", "humidityAdd": 2, "tempAdd": -6, "sky": "env.sky.coldAir", "coverScale": 1 }
+  ],
+  "weights": {
+    "spring": { "sunny": 0.05, "cloudy": 0.15, "overcast": 0.25, "rain": 0.25, "returningSouth": 0.3, "coldAir": 0 },
+    "preFlood": { "sunny": 0.08, "cloudy": 0.12, "overcast": 0.15, "rain": 0.45, "returningSouth": 0.15, "coldAir": 0.05 },
+    "summer": { "sunny": 0.28, "cloudy": 0.18, "overcast": 0.12, "rain": 0.32, "returningSouth": 0.05, "coldAir": 0.05 },
+    "autumn": { "sunny": 0.46, "cloudy": 0.24, "overcast": 0.14, "rain": 0.1, "returningSouth": 0.01, "coldAir": 0.05 },
+    "winter": { "sunny": 0.3, "cloudy": 0.2, "overcast": 0.18, "rain": 0.07, "returningSouth": 0, "coldAir": 0.25 }
+  }
+}

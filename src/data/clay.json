@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "partMax": 100,
+  "waterMax": 40,
+  "initial": { "diger": 50, "kaolin": 20, "aged": 10, "water": 8 },
+  "recommended": { "diger": 30, "kaolin": 45, "aged": 25, "water": 6 },
+  "formula": {
+    "P": { "kaolin": 0.9, "aged": 0.35, "water": 0.45, "bias": -0.28 },
+    "H": { "diger": 0.5, "water": -0.32, "humidity": -0.05 },
+    "I": { "diger": 0.7, "water": 0.05 }
+  },
+  "sweet": { "P": [0.16, 0.4], "H": [0.02, 0.3] },
+  "poorPenalty": 0.15,
+  "kneadSeconds": 3,
+  "kneadBonus": 0.04,
+  "clays": [
+    {
+      "id": "diger",
+      "name": "赤红地格土",
+      "origin": "揭阳本地·含石英与铁质偏高",
+      "sand": 0.62,
+      "plasticity": 0.48,
+      "iron": 0.7,
+      "price": 2,
+      "card": "ui.clay.diger"
+    },
+    {
+      "id": "kaolin",
+      "name": "浅色高岭土",
+      "origin": "搭配用·补可塑性",
+      "sand": 0.22,
+      "plasticity": 0.8,
+      "iron": 0.08,
+      "price": 3,
+      "card": "ui.clay.kaolin"
+    },
+    {
+      "id": "aged",
+      "name": "淘洗陈腐旧泥",
+      "origin": "淘洗陈腐·性子较稳",
+      "sand": 0.35,
+      "plasticity": 0.55,
+      "iron": 0.25,
+      "price": 2.5,
+      "card": "ui.clay.aged"
+    }
+  ]
+}

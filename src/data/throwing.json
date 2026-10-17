@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "rpmMin": 0,
+  "rpmMax": 800,
+  "rpmRef": 1500,
+  "plasticityCoeff": 3,
+  "centerHeightPenalty": 0.25,
+  "rpmPenalty": 1.2,
+  "waterPenalty": 5,
+  "waterSweet": 0.18,
+  "skillBonus": 0.03,
+  "skillCapSeconds": 10,
+  "poorTax": 0.15,
+  "dryTax": 0.8,
+  "radiusPerSecondAtMaxRpm": 0.022,
+  "matchTolerance": 0.06,
+  "steadyRpmDelta": 40,
+  "targetFoot": 0.38,
+  "targetBelly": 0.72,
+  "targetMouth": 1,
+  "handleMin": 0.25,
+  "handleMax": 1.15
+}

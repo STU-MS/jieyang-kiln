@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "baseSeconds": 28,
+  "placementScale": { "vent": 0.8, "shade": 1, "sun": 0.72 },
+  "humidityStep": 10,
+  "durationPerStep": 1.08,
+  "bandPerStep": 0.85,
+  "baseBandWidth": 80,
+  "segmentSeconds": 7,
+  "sunCrackChance": 0.45,
+  "fluctuationAmp": 3.5,
+  "curvePoints": 6
+}

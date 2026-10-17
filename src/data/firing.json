@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "peaks": [1080, 1120, 1160, 1200],
+  "holdMax": 4,
+  "burnSeconds": 10,
+  "stuckChance": 0.7,
+  "doorDangerTemp": 600,
+  "doorShatterTemp": 1000,
+  "lowHoldHours": 1
+}

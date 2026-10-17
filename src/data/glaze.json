@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "stockBase": 8,
+  "stockPerCard": 1,
+  "stockCardCap": 4,
+  "stockExcellent": 2,
+  "layerCost": 2,
+  "brushCost": 1,
+  "uniformWarn": 0.4,
+  "footLayerLimit": 4,
+  "glazes": [
+    {
+      "id": "qinghui",
+      "name": "青灰釉",
+      "card": "ui.glaze.qinghui",
+      "tempMin": 1120,
+      "tempMax": 1160,
+      "iron": "中高",
+      "defect": "温度低则哑光",
+      "kiln": "青灰基底，偶发银斑"
+    },
+    {
+      "id": "jianghe",
+      "name": "酱褐釉",
+      "card": "ui.glaze.jianghe",
+      "tempMin": 1080,
+      "tempMax": 1120,
+      "iron": "高",
+      "defect": "温度过高失色",
+      "kiln": "褐中泛红，铁锈斑"
+    },
+    {
+      "id": "mihuang",
+      "name": "米黄釉",
+      "card": "ui.glaze.mihuang",
+      "tempMin": 1100,
+      "tempMax": 1140,
+      "iron": "低中",
+      "defect": "针孔敏感",
+      "kiln": "暖黄，局部泛绿"
+    },
+    {
+      "id": "tiexiu",
+      "name": "铁锈花釉",
+      "card": "ui.glaze.tiexiu",
+      "tempMin": 1140,
+      "tempMax": 1180,
+      "iron": "高",
+      "defect": "流釉风险大",
+      "kiln": "斑纹密度最高"
+    },
+    {
+      "id": "caomu",
+      "name": "草木灰釉",
+      "card": "ui.glaze.caomu",
+      "tempMin": 1160,
+      "tempMax": 1200,
+      "iron": "中",
+      "defect": "橘皮高发",
+      "kiln": "自然流淌，层次最丰富"
+    },
+    {
+      "id": "wuguang",
+      "name": "无光白釉",
+      "card": "ui.glaze.wuguang",
+      "tempMin": 1080,
+      "tempMax": 1120,
+      "iron": "任意",
+      "defect": "开裂敏感",
+      "kiln": "窑变最弱，适合打底"
+    }
+  ]
+}

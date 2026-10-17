@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "rings": 64,
+  "segments": 48,
+  "height": 1,
+  "initialRadius": 0.7,
+  "lip": 0.055,
+  "wall": 0.08,
+  "profileNote": "缺省母线：口 1.0 / 腹 0.72 / 足 0.38",
+  "hardH": 0.24
+}
