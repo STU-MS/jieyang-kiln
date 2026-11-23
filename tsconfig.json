@@ -16,6 +16,5 @@
     "resolveJsonModule": true,
     "esModuleInterop": true
   },
-  "include": ["src"],
-  "exclude": ["src/render/kilnWorker.ts"]
+  "include": ["src"]
 }

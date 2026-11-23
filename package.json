@@ -1,7 +1,7 @@
 {
-  "name": "jieyang-kiln",
+  "name": "jieyang-taosu",
   "private": true,
-  "version": "0.1.0",
+  "version": "2.0.0",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -20,7 +20,6 @@
     "three": "^0.169.0"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/three": "^0.169.0",
