@@ -59,6 +59,25 @@ jobs:
         with:
           path: dist
           name: github-pages-${{ github.run_attempt }}
+      # artifacts 列表 API 有秒级一致性窗口：upload 刚结束就查会拿到 0 个，
+      # deploy-pages 于是报「No artifacts named ...」（实测 upload 结束 1 秒后仍不可见，
+      # 见 #17）。先等到列表里看得见自己的 artifact 再部署。
+      - name: 等本次 artifact 可见
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT: github-pages-${{ github.run_attempt }}
+        run: |
+          for i in $(seq 1 30); do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
+                 --jq '.artifacts[].name' | grep -qx "$ARTIFACT"; then
+              echo "第 $i 次查询：$ARTIFACT 已可见"
+              exit 0
+            fi
+            echo "第 $i 次查询：还看不到 $ARTIFACT，等 2 秒"
+            sleep 2
+          done
+          echo "::error::60 秒内 $ARTIFACT 都没出现在 artifacts 列表，artifact 可能真的没上传成功"
+          exit 1
       - id: deployment
         uses: actions/deploy-pages@v4
         with:
