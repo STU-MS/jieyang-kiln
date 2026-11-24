@@ -1,0 +1,19 @@
+{
+  "app.title": "揭阳陶塑",
+  "split.title": "拆泥",
+  "split.hint": "拖动分隔块，把一团泥分给头、身、臂、腿。头分多了，身子就小。",
+  "split.part.head": "头",
+  "split.part.body": "身",
+  "split.part.arms": "臂",
+  "split.part.legs": "腿",
+  "split.pct": "{n}%",
+  "split.confirm": "就这么分",
+  "split.splitting": "分开咯……",
+  "split.next": "去捏",
+  "split.stations.head": "头",
+  "split.stations.body": "身",
+  "split.stations.arms": "臂",
+  "split.stations.legs": "腿",
+  "split.saved": "已存档",
+  "split.memoryOnly": "存不上，这局只在内存里"
+}
