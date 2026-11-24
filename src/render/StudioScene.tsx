@@ -31,8 +31,8 @@ export function StudioScene() {
       if (!studio || !renderer) return
       const w = host.clientWidth
       const h = host.clientHeight
-      renderer.setSize(w, h, false)
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      renderer.setSize(w, h)
       studio.camera.aspect = w / h
       studio.camera.updateProjectionMatrix()
     }

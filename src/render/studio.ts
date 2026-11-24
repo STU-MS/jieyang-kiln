@@ -13,12 +13,15 @@ export interface Studio {
   dispose(): void
 }
 
-/** 相机默认位姿：从右前方略高处看向桌面，背景是靠墙工作台和窗。 */
-export const CAMERA_POS = new THREE.Vector3(0.9, 1.7, 2.6)
-export const CAMERA_LOOK = new THREE.Vector3(0.3, 0.85, -0.3)
+/**
+ * 相机默认位姿：站在桌子右侧、正对长边。视线与长边垂直，
+ * 桌面横向铺满画面下中部，背后保留工作台与置物架作环境。
+ */
+export const CAMERA_POS = new THREE.Vector3(1.2, 1.35, 0.53)
+export const CAMERA_LOOK = new THREE.Vector3(0.75, 0.88, 0.53)
 
-/** 中央锯木架桌台面中心（从俯视截图量得，y 是台面高）。 */
-export const TABLE_TOP = new THREE.Vector3(0.3, 0.78, -0.3)
+/** 中央锯木架桌台面中心（从 GLB 顶点量得：台面高 0.94，长边沿 z）。 */
+export const TABLE_TOP = new THREE.Vector3(0.75, 0.94, 0.53)
 
 export async function createStudio(): Promise<Studio> {
   const scene = new THREE.Scene()
