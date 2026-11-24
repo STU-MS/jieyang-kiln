@@ -1,7 +1,14 @@
 :root {
   --bg: #1a1714;
   --ink: #e8e0d4;
+  --ink-dim: #a89c8a;
+  --clay: #6b4a35;
+  --clay-lit: #8a5f43;
+  --panel: rgba(20, 17, 14, 0.82);
+  --stroke: rgba(232, 224, 212, 0.16);
+  --accent: #c8663f;
   color-scheme: dark;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Songti SC", system-ui, sans-serif;
 }
 
 * {
@@ -20,4 +27,212 @@ body,
 
 canvas {
   display: block;
+}
+
+/* ─── 阶段外壳：3D 场景铺满，UI 浮在下方 ─── */
+
+.stage {
+  position: fixed;
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+}
+
+.stage > * {
+  pointer-events: auto;
+}
+
+.stage-head {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 56px;
+  pointer-events: none;
+  /* 顶部压暗：标题压在亮桌面 / 门上也要读得清 */
+  background: linear-gradient(180deg, rgba(12, 10, 8, 0.92) 0%, rgba(12, 10, 8, 0.62) 45%, rgba(12, 10, 8, 0) 100%);
+}
+
+.stage-head h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+}
+
+.stage-head .hint {
+  margin: 6px 0 0;
+  max-width: 34em;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
+}
+
+.split-panel {
+  width: min(640px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--stroke);
+  border-radius: 18px;
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* ─── 四段滑杆 ─── */
+
+.split-track {
+  position: relative;
+  height: 64px;
+  border-radius: 12px;
+  background: #2b241d;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+
+.split-track.is-disabled {
+  opacity: 0.72;
+}
+
+.split-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid rgba(0, 0, 0, 0.35);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(243, 234, 217, 0.92);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+  white-space: nowrap;
+  transition: width 60ms linear, left 60ms linear;
+}
+
+/* 段太窄放不下数字（如 10%）就把数字藏掉，读数行里有 */
+.split-seg[data-narrow] span {
+  visibility: hidden;
+}
+
+.split-seg[data-part="head"] { background: linear-gradient(180deg, #8a5f43, #6b4a35); }
+.split-seg[data-part="body"] { background: linear-gradient(180deg, #7d5539, #5f422e); }
+.split-seg[data-part="arms"] { background: linear-gradient(180deg, #96704f, #74543a); }
+.split-seg[data-part="legs"] { background: linear-gradient(180deg, #6f4d36, #543a28); }
+
+.split-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 26px;
+  margin-left: -13px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.split-divider::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 50%;
+  width: 4px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: var(--ink);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+
+.split-divider::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 50%;
+  background: rgba(232, 224, 212, 0.92);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+
+.split-divider:focus-visible {
+  outline: none;
+}
+
+.split-divider:focus-visible::after {
+  box-shadow: 0 0 0 3px var(--accent), 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* ─── 百分比读数 / 按钮 ─── */
+
+.split-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.split-readout b {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+button {
+  min-height: 44px;
+  padding: 10px 22px;
+  border: 1px solid rgba(232, 224, 212, 0.28);
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fbf6ee;
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+button.ghost {
+  background: transparent;
+  border-color: rgba(232, 224, 212, 0.4);
+  color: var(--ink);
+}
+
+button:disabled {
+  background: rgba(232, 224, 212, 0.12);
+  color: var(--ink-dim);
+  cursor: default;
+}
+
+.save-note {
+  margin: 0;
+  font-size: 12px;
+  color: #d9a05b;
+}
+
+@media (max-width: 560px) {
+  .stage-head h1 { font-size: 17px; }
+  .stage-head .hint { font-size: 12px; }
+  .split-panel { padding: 12px; border-radius: 14px; }
+  .split-track { height: 56px; }
+  .split-seg { font-size: 12px; }
 }

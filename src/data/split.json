@@ -1,14 +1,47 @@
 {
   "version": 1,
-  "parts": ["head", "body", "arms", "legs"],
-  "min": { "head": 0.05, "body": 0.1, "arms": 0.1, "legs": 0.1 },
-  "default": { "head": 0.2, "body": 0.4, "arms": 0.15, "legs": 0.25 },
-  "whole": { "radius": 0.16, "squash": 0.72 },
-  "chunk": { "unitRadius": 0.16, "squash": 0.72 },
+  "parts": [
+    "head",
+    "body",
+    "arms",
+    "legs"
+  ],
+  "min": {
+    "head": 0.05,
+    "body": 0.1,
+    "arms": 0.1,
+    "legs": 0.1
+  },
+  "default": {
+    "head": 0.2,
+    "body": 0.4,
+    "arms": 0.15,
+    "legs": 0.25
+  },
+  "whole": {
+    "radius": 0.07,
+    "squash": 0.72
+  },
+  "chunk": {
+    "unitRadius": 0.07,
+    "squash": 0.72
+  },
   "stations": {
-    "head": [0, 0.26],
-    "body": [0, 0.08],
-    "arms": [-0.24, -0.1],
-    "legs": [0.24, -0.1]
+    "head": [
+      -0.02,
+      0.17
+    ],
+    "body": [
+      0.06,
+      0.055
+    ],
+    "arms": [
+      -0.02,
+      -0.06
+    ],
+    "legs": [
+      0.06,
+      -0.19
+    ]
   }
 }

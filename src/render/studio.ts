@@ -9,19 +9,37 @@ export interface Studio {
   readonly room: THREE.Group
   /** 中央木桌台面中心（世界坐标），道具放这里 */
   readonly tableTop: THREE.Vector3
+  /** 每帧回调（在 render 之前），参数是本帧秒数 */
+  frame: ((dt: number, now: number) => void) | null
   /** 释放 GPU 资源 */
   dispose(): void
 }
 
 /**
  * 相机默认位姿：站在桌子右侧、正对长边。视线与长边垂直，
- * 桌面横向铺满画面下中部，背后保留工作台与置物架作环境。
+ * 桌面铺满画面下三分之二，泥团落在正中，背后保留工作台、门与置物架作环境。
+ * 相比 v2.0 骨架往后拉约 20cm：拆泥阶段的泥团与四个工位要同时在画面里。
  */
-export const CAMERA_POS = new THREE.Vector3(1.2, 1.35, 0.53)
-export const CAMERA_LOOK = new THREE.Vector3(0.75, 0.88, 0.53)
+export const CAMERA_POS = new THREE.Vector3(1.36, 1.34, 0.58)
+export const CAMERA_LOOK = new THREE.Vector3(0.74, 0.94, 0.52)
 
 /** 中央锯木架桌台面中心（从 GLB 顶点量得：台面高 0.94，长边沿 z）。 */
 export const TABLE_TOP = new THREE.Vector3(0.75, 0.94, 0.53)
+
+/** 设计基准画幅 16:10：更窄（竖屏）时相机沿视线后拉，保证泥团与四个工位都在画面里。 */
+export const BASE_ASPECT = 1.6
+
+/**
+ * 按画幅摆相机：横屏用默认位姿；竖屏沿「目标点 → 相机」方向后拉，
+ * 最多 1.6 倍（再远房间就空了）。只改位置，不改视角方向。
+ */
+export function frameCamera(camera: THREE.PerspectiveCamera, aspect: number): void {
+  const pull = THREE.MathUtils.clamp(Math.sqrt(BASE_ASPECT / Math.max(aspect, 0.3)), 1, 1.6)
+  camera.position.copy(CAMERA_LOOK).addScaledVector(CAMERA_POS.clone().sub(CAMERA_LOOK), pull)
+  camera.lookAt(CAMERA_LOOK)
+  camera.aspect = aspect
+  camera.updateProjectionMatrix()
+}
 
 export async function createStudio(): Promise<Studio> {
   const scene = new THREE.Scene()
@@ -60,6 +78,7 @@ export async function createStudio(): Promise<Studio> {
     camera,
     room,
     tableTop: TABLE_TOP.clone(),
+    frame: null,
     dispose() {
       scene.traverse((obj) => {
         const mesh = obj as THREE.Mesh

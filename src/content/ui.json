@@ -8,12 +8,9 @@
   "split.part.legs": "腿",
   "split.pct": "{n}%",
   "split.confirm": "就这么分",
+  "split.redo": "重分",
   "split.splitting": "分开咯……",
   "split.next": "去捏",
-  "split.stations.head": "头",
-  "split.stations.body": "身",
-  "split.stations.arms": "臂",
-  "split.stations.legs": "腿",
-  "split.saved": "已存档",
-  "split.memoryOnly": "存不上，这局只在内存里"
+  "split.memoryOnly": "存不上，这局只在内存里",
+  "split.discarded": "旧存档读不了，这局重新开始"
 }

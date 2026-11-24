@@ -52,6 +52,19 @@ describe('存档：失败态', () => {
     expect(back.discarded).toBe(true)
   })
 
+  it('结构完全合法但版本是 1 的存档也拒收（版本闸门本身生效）', () => {
+    const KEY = 'jieyang.taosu.save'
+    const v1 = {
+      schemaVersion: 1,
+      id: 'old-run',
+      s1_confirmed: true,
+      s1_split: { head: 0.3, body: 0.3, arms: 0.15, legs: 0.25 },
+    }
+    const back = loadSession(memoryStorage({ [KEY]: JSON.stringify(v1) }))
+    expect(back.session).toBeNull()
+    expect(back.discarded).toBe(true)
+  })
+
   it('JSON 坏了 / 结构不对 → 当没有存档', () => {
     const KEY = 'jieyang.taosu.save'
     const bad = memoryStorage({ [KEY]: '{not json' })
