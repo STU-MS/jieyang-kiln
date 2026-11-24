@@ -51,11 +51,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - uses: actions/configure-pages@v5
+      # artifact 名默认固定为 github-pages，而 deploy-pages 是按名字在本 run 里查的。
+      # 同一个 run 重跑时 GitHub 不会清掉上次尝试的 artifact，于是会出现两个同名
+      # github-pages，deploy-pages 直接报「Multiple artifacts named ...」
+      # （见 #15）。名字带上 run_attempt，重跑永远只有自己那一个。
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+          name: github-pages-${{ github.run_attempt }}
       - id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
 
   release:
     # 发时间戳 Release + 独立运行压缩包（tag = v + UTC 完整时间戳，自动生成）
