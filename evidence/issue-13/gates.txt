@@ -1,24 +1,25 @@
 $ pnpm install --frozen-lockfile
-Already up to date / Done in 410ms
+Already up to date / Done in 942ms
 
 $ pnpm typecheck
-$ tsc --noEmit   (exit 0)
+$ tsc --noEmit  (exit 0)
 
 $ pnpm build
-dist/assets/index-CRcQiPlK.js  723.30 kB │ gzip: 195.36 kB
-✓ built in 1.85s
+dist/assets/index-DlEqmA56.js  744.01 kB │ gzip: 201.49 kB
+✓ built in 4.09s
 
 $ pnpm test
  RUN  v2.1.9 /Users/hand/project/jieyang-kiln
 
- ✓ src/sim/split.test.ts (10 tests) 10ms
- ✓ src/assets/manifest.test.ts (2 tests) 4ms
- ✓ src/game/session.test.ts (6 tests) 125ms
- ✓ src/render/clay.test.ts (8 tests) 39ms
- ✓ src/persist/storage.test.ts (9 tests) 3ms
+ ✓ src/assets/manifest.test.ts (2 tests) 8ms
+ ✓ src/persist/storage.test.ts (9 tests) 43ms
+ ✓ src/sim/split.test.ts (10 tests) 97ms
+ ✓ src/game/session.test.ts (6 tests) 271ms
+ ✓ src/render/clay.test.ts (10 tests) 1100ms
+   ✓ 泥团：拆分是势场流体被拉开断成四块 > 断开是一步步发生：中途至少有某个时刻已经是两块以上 460ms
 
  Test Files  5 passed (5)
-      Tests  35 passed (35)
-   Start at  18:44:32
-   Duration  715ms (transform 145ms, setup 0ms, collect 313ms, tests 180ms, environment 1ms, prepare 530ms)
+      Tests  37 passed (37)
+   Start at  21:01:30
+   Duration  2.37s (transform 421ms, setup 0ms, collect 789ms, tests 1.52s, environment 2ms, prepare 1.38s)
 
