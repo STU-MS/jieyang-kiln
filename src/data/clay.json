@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "tint": "#f0e4d6",
+  "roughness": 0.78,
+  "metalness": 0,
+  "albedo": "clay.albedo",
+  "repeat": 2.5,
+  "grain": {
+    "normal": 0.35,
+    "frequency": [
+      70,
+      50,
+      30
+    ]
+  }
+}
