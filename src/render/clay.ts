@@ -1,29 +1,37 @@
 import * as THREE from 'three'
+import { MarchingCubes } from 'three/examples/jsm/objects/MarchingCubes.js'
+import clayData from '../data/clay.json'
 import data from '../data/split.json'
+import { assetId } from '../assets/manifest'
 import type { Part, Split } from '../game/types'
+import { createClayBlob, type BlobBall, type ClayBlob } from './metaball'
 
 /**
  * 泥团：一团泥（S0）→ 四块泥（S1）与拆分动画。
- * 几何全部程序生成（SphereGeometry 缩放），不依赖资产文件（开发计划 §4）。
+ * 几何全部程序生成（SphereGeometry 缩放 / marching cubes 势场），不依赖模型资产（开发计划 §4）；
+ * 表面只用一张 CC0 漫反射贴图（`clay.albedo`）。
  * 坐标系：以桌面中心为原点，y 向上；工位偏移来自数据表。
  */
 const WHOLE = data.whole
 const CHUNK = data.chunk
 const STATIONS = data.stations as unknown as Record<Part, readonly [number, number]>
 const PARTS = data.parts as Part[]
+const ANIM = data.animation
 
 /** 拆分动画时长（秒）。 */
 export const SPLIT_SECONDS = 1.6
 
 /** 湿泥色（设计文档 §2.5：深、略有反光）。阴干后换干坯色是另一阶段的事。 */
-export const WET_CLAY = '#6b4a35'
+export const WET_CLAY = clayData.tint
 
 export interface ClayRig {
   readonly group: THREE.Group
-  /** 整团泥 */
+  /** 整团泥（S0 静置） */
   readonly whole: THREE.Mesh
-  /** 四块泥，按部位 */
+  /** 四块泥，按部位（S1 静置、后续捏与上釉都走它们） */
   readonly chunks: Record<Part, THREE.Mesh>
+  /** 拆分动画期间才存在的势场流体（1.6 秒后隐藏） */
+  readonly blob: MarchingCubes
   /** 设置比例并重算四块体积：块体积 = 整团体积 × 占比 */
   setSplit(split: Split): void
   /** 显示整团 / 隐藏四块（S0） */
@@ -31,9 +39,9 @@ export interface ClayRig {
   /** 显示四块停在工位 / 隐藏整团（读档恢复 S1） */
   showChunks(): void
   /**
-   * 拆分动画某一帧的姿态，p ∈ [0,1]：
-   * 0–0.3 整团拉长变细；0.3 起整团换成四块（已按比例），
-   * 四块沿弧线飞到工位，带 overshoot 回弹，顶点噪声从强收敛到 0。
+   * 拆分动画某一帧的姿态，p ∈ [0,1]（节奏见数据表 animation）：
+   * 四颗势场球从整团位置水平拉开，势场表面先融合成一整团、被拉长变细、
+   * 再断裂成四块，末段交叉淡出到四块真网格。全程贴桌面，不向上抬。
    */
   poseSplit(p: number): void
   dispose(): void
@@ -70,6 +78,17 @@ export function createClayRig(opts: ClayRigOptions = {}): ClayRig {
     }
   }
 
+  const blobMat = clayMaterial()
+  const BLOB = ANIM.blob
+  const blob: ClayBlob = createClayBlob(blobMat, {
+    resolution: BLOB.resolution,
+    extent: BLOB.extent,
+    squash: WHOLE.squash,
+    fieldRadius: BLOB.fieldRadius,
+  })
+  blob.mesh.visible = false
+  group.add(blob.mesh)
+
   let split: Split = data.default as Split
 
   /** 整团泥的半径（缩放 1 时） */
@@ -86,10 +105,28 @@ export function createClayRig(opts: ClayRigOptions = {}): ClayRig {
     return CHUNK.unitRadius * chunks[part].scale.y
   }
 
+  /** 势场球的世界半径：体积 ∝ 占比（半径 ∝ 占比的立方根） */
+  function blobRadius(share: number): number {
+    return 2 * BLOB.extent * BLOB.fieldRadius * Math.cbrt(share)
+  }
+
+  /**
+   * 四颗球完全重叠时，势场表面比「半径之和」大一圈，按合并后的实际半径归一，
+   * 让开局那团和 SphereGeometry 整团一样大（切换看不出来）。
+   * 单球：strength / r² - subtract = isolation；合并后：Σ(2rᵢ² / r²) - 4·isolation = isolation。
+   */
+  function mergedFit(): number {
+    const sum = PARTS.reduce((acc, part) => acc + Math.cbrt(split[part]) ** 2, 0)
+    const sumR2 = BLOB.fieldRadius ** 2 * sum
+    const mergedQ = Math.sqrt((2 * sumR2) / 5)
+    return wholeRadius / (2 * BLOB.extent * mergedQ)
+  }
+
   const rig: ClayRig = {
     group,
     whole,
     chunks,
+    blob: blob.mesh,
     setSplit(next) {
       split = { ...next }
       for (const part of PARTS) {
@@ -106,16 +143,18 @@ export function createClayRig(opts: ClayRigOptions = {}): ClayRig {
       whole.scale.set(1, WHOLE.squash, 1)
       whole.position.y = wholeRadius * WHOLE.squash
       setNoise(wholeMat, 0)
+      blob.setOpacity(0)
       for (const p of PARTS) {
-        chunks[p].visible = false
+        fadeTo(chunks[p], 0)
         if (labels[p]) labels[p].visible = false
         setNoise(chunks[p].material as THREE.Material, 0)
       }
     },
     showChunks() {
       whole.visible = false
+      blob.setOpacity(0)
       for (const p of PARTS) {
-        chunks[p].visible = true
+        fadeTo(chunks[p], 1)
         if (labels[p]) labels[p].visible = true
         const [x, z] = STATIONS[p]
         chunks[p].position.set(x, chunkRestY(p), z)
@@ -123,30 +162,36 @@ export function createClayRig(opts: ClayRigOptions = {}): ClayRig {
       }
     },
     poseSplit(p) {
-      const PULL = 0.3
-      whole.visible = p < PULL
-      if (whole.visible) {
-        const stretch = 1 + easeOut(p / PULL) * 0.9
-        whole.scale.set(1 / Math.sqrt(stretch), WHOLE.squash * stretch, 1 / Math.sqrt(stretch))
-        // 底部贴桌面，向上拉长
-        whole.position.y = wholeRadius * WHOLE.squash * stretch
-        setNoise(wholeMat, (p / PULL) * 0.03)
-      }
-      const t = clamp01((p - PULL) / (1 - PULL))
-      for (const part of PARTS) {
-        const m = chunks[part]
-        const on = p >= PULL
-        m.visible = on
-        if (labels[part]) labels[part].visible = on && t > 0.8
-        if (!on) continue
+      whole.visible = false
+
+      // ① 势场：球心水平分开（错开一点出发），球半径从「合并后正好是一整团」长到真实体积
+      const grow = eased(p / ANIM.fit)
+      const scale = mergedFit() + (1 - mergedFit()) * grow
+      const balls: BlobBall[] = PARTS.map((part, i) => {
+        const t = clamp01((p / ANIM.travel - i * ANIM.stagger) / (1 - i * ANIM.stagger))
+        const k = eased(t)
         const [x, z] = STATIONS[part]
-        const k = backOut(t, 1.4)
-        // 弧线：先抬再落，落到工位后贴桌面
-        m.position.set(x * k, chunkRestY(part) + Math.sin(Math.min(k, 1) * Math.PI) * 0.08, z * k)
-        setNoise(m.material as THREE.Material, (1 - t) * 0.04)
+        const radius = blobRadius(split[part]) * scale
+        return {
+          x: x * k,
+          // 球心高度 = 球自身的竖直半径：底部始终贴桌面，横向滑动时不会浮空也不会抬升
+          y: radius * WHOLE.squash,
+          z: z * k,
+          radius,
+        }
+      })
+      blob.update(balls)
+
+      // ② 末段交叉淡出：势场消失、真网格淡入（位置已经对齐，看起来是最后一点黏丝断开）
+      const mix = clamp01((p - ANIM.swap) / ANIM.swapFade)
+      blob.setOpacity(1 - mix)
+      for (const part of PARTS) {
+        fadeTo(chunks[part], mix)
+        if (labels[part]) labels[part].visible = mix > 0.5
       }
     },
     dispose() {
+      blob.dispose()
       group.traverse((obj) => {
         const mesh = obj as THREE.Mesh
         if (mesh.isMesh) mesh.geometry.dispose()
@@ -166,25 +211,65 @@ export function createClayRig(opts: ClayRigOptions = {}): ClayRig {
   return rig
 }
 
-// ─── 湿泥材质 + 顶点噪声（「泥涌出来」的近似；设计文档 §2.2 做法，拆分动画复用） ───
+// ─── 湿泥材质：一张 CC0 漫反射 + 程序噪声法线（打散光滑球面那条干净的镜面高光） ───
 
 const NOISE = 'uNoise'
 
+/** 贴图全局共用一份（四块泥 + 整团 + 势场），避免重复解码。 */
+let texture: THREE.Texture | null = null
+
+function clayTexture(): THREE.Texture {
+  if (texture) return texture
+  // 单测跑在 node 里，没有 DOM 也就没有 ImageLoader；几何断言不需要贴图
+  const tex =
+    typeof document === 'undefined'
+      ? new THREE.Texture()
+      : new THREE.TextureLoader().load(assetId(clayData.albedo as 'clay.albedo').url)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.wrapS = THREE.RepeatWrapping
+  tex.wrapT = THREE.RepeatWrapping
+  tex.repeat.set(clayData.repeat, clayData.repeat)
+  tex.anisotropy = 4
+  texture = tex
+  return tex
+}
+
 function clayMaterial(): THREE.Material {
-  const mat = new THREE.MeshStandardMaterial({ color: WET_CLAY, roughness: 0.55, metalness: 0 })
+  const grain = clayData.grain
+  const mat = new THREE.MeshStandardMaterial({
+    color: WET_CLAY,
+    map: clayTexture(),
+    roughness: clayData.roughness,
+    metalness: clayData.metalness,
+  })
   const uniform: THREE.IUniform<number> = { value: 0 }
   ;(mat as THREE.Material & { userData: { noise?: THREE.IUniform<number> } }).userData.noise = uniform
   mat.onBeforeCompile = (shader) => {
     shader.uniforms[NOISE] = uniform
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\nuniform float ${NOISE};\n`)
+      // 程序噪声法线：打散光滑球面那条干净的镜面高光
+      .replace(
+        '#include <beginnormal_vertex>',
+        `#include <beginnormal_vertex>
+         float grainX = position.x * ${num(grain.frequency[1])} + position.y * ${num(grain.frequency[0])};
+         float grainY = position.y * ${num(grain.frequency[0])} + position.z * ${num(grain.frequency[2])};
+         float grainZ = position.z * ${num(grain.frequency[2])} - position.x * ${num(grain.frequency[1])};
+         objectNormal = normalize(objectNormal + vec3(sin(grainX), sin(grainY), sin(grainZ)) * ${num(grain.normal)});`,
+      )
+      // 顶点噪声：静置时是 0；只有显式设置才会动（预留给马赛克阶段的「泥在涌」）
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
-         transformed += normal * ${NOISE} * sin(position.y * 70.0 + position.x * 50.0 + position.z * 30.0);`,
+         transformed += normal * ${NOISE} * sin(position.y * ${num(grain.frequency[0])} + position.x * ${num(grain.frequency[1])} + position.z * ${num(grain.frequency[2])});`,
       )
   }
   return mat
+}
+
+/** 浮点数写成 GLSL 字面量（必须带小数点）。 */
+function num(v: number): string {
+  return v.toFixed(1)
 }
 
 function setNoise(mat: THREE.Material, amount: number): void {
@@ -192,19 +277,33 @@ function setNoise(mat: THREE.Material, amount: number): void {
   if (u) u.value = amount
 }
 
+/** 0 = 隐藏，1 = 不透明；中间值走高透明，供拆分末段交叉淡出用。 */
+function fadeTo(mesh: THREE.Mesh, alpha: number): void {
+  const mat = mesh.material as THREE.MeshStandardMaterial
+  if (alpha <= 0.001) {
+    mesh.visible = false
+    mesh.castShadow = false
+    return
+  }
+  mesh.visible = true
+  const opaque = alpha > 0.999
+  if (mat.transparent === opaque) {
+    mat.transparent = !opaque
+    mat.depthWrite = opaque
+    mat.needsUpdate = true
+  }
+  mat.opacity = opaque ? 1 : alpha
+  mesh.castShadow = opaque
+}
+
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v))
 }
 
-function easeOut(t: number): number {
-  return 1 - (1 - t) * (1 - t)
-}
-
-/** back-out：先过冲再回弹。 */
-function backOut(t: number, s: number): number {
-  const c = s + 1
-  const u = t - 1
-  return 1 + c * u * u * u + s * u * u
+/** smoothstep：起止都平滑，读起来像黏稠的流体而不是机械位移。 */
+function eased(t: number): number {
+  const c = clamp01(t)
+  return c * c * (3 - 2 * c)
 }
 
 function makeLabel(text: string): THREE.Sprite {
