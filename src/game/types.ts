@@ -32,6 +32,10 @@ export interface GameSession {
   s1_confirmed: boolean
   s1_split: Split
   s2_shape: ShapeState
+  /** ④ 衣服。undefined = 还没穿过（拆泥阶段的存档就是这种，读档不算坏档）。0 不落盘：脱掉即移除字段。 */
+  s4_outfit?: { id: number }
+  /** ⑤ 阴干。undefined / false = 还没阴干；true 是单向门，不可逆。 */
+  s5_dried?: boolean
   /** ⑥ 上釉。undefined = 还没上釉（拆泥阶段的存档就是这种，读档不算坏档）。 */
   s6_glaze?: GlazeLayer
 }

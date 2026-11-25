@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "outfits": [
+    { "id": 1, "key": "tshirt", "source": "MVP 现成 CC0 上衣，具体件 M1 落资产时定" },
+    { "id": 2, "key": "longsleeve", "source": "MVP 现成 CC0 上衣，具体件 M1 落资产时定" },
+    { "id": 3, "key": "dress", "source": "MVP 现成 CC0 连衣裙，具体件 M1 落资产时定" }
+  ]
+}

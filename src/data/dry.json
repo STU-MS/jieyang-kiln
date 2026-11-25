@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "transitionMs": 2000,
+  "wet": { "color": "#7A5232", "roughness": 0.35 },
+  "dry": { "color": "#B08A5C", "roughness": 0.85 },
+  "source": "色值与粗糙度为推断：设计文档只给「湿泥深、略有反光 → 干坯浅、无反光」，M1 落 clay.albedo 后按实测校准"
+}

@@ -3,6 +3,8 @@ import { newSession, type GameSession } from '../game/types'
 import { createLayer, paintDab } from '../sim/glaze'
 import { defaultSplit } from '../sim/split'
 import { SHAPE_CENTER, SHAPE_PARTS, shapeSliders } from '../sim/shape'
+import { wearOutfit } from '../sim/outfit'
+import { markDried } from '../sim/dry'
 import { loadSession, writeSession, type StorageLike } from './storage'
 
 function memoryStorage(initial?: Record<string, string>): StorageLike & { dump: Record<string, string> } {
@@ -35,6 +37,63 @@ describe('存档：每阶段保存 → 重载 → 数据逐字相同', () => {
     const s = { ...newSession('run-2', defaultSplit()), s1_confirmed: true }
     writeSession(s, store)
     expect(loadSession(store).session?.s1_confirmed).toBe(true)
+  })
+})
+
+describe('存档：衣服与阴干（M5 可选字段）', () => {
+  it('穿衣服 + 阴干后写读往返，两个字段逐字相同', () => {
+    const store = memoryStorage()
+    const s = markDried(wearOutfit(newSession('run-3', defaultSplit()), 3))
+    expect(writeSession(s, store)).toBe(true)
+    const back = loadSession(store)
+    expect(back.session).toEqual(s)
+    expect(back.session?.s4_outfit).toEqual({ id: 3 })
+    expect(back.session?.s5_dried).toBe(true)
+  })
+
+  it('旧存档（拆泥阶段存的，没有 s4 / s5）照样能读，不算坏档', () => {
+    const KEY = 'jieyang.taosu.save'
+    const store = memoryStorage({ [KEY]: JSON.stringify({ schemaVersion: 2, id: 'old', s1_confirmed: false, s1_split: defaultSplit() }) })
+    const back = loadSession(store)
+    expect(back.session).not.toBeNull()
+    expect(back.discarded).toBe(false)
+    expect(back.session?.s4_outfit).toBeUndefined()
+    expect(back.session?.s5_dried).toBeUndefined()
+  })
+
+  it('衣服 id 不在数据表里 → 只丢衣服字段，整局保留', () => {
+    const KEY = 'jieyang.taosu.save'
+    const raw = { schemaVersion: 2, id: 'x', s1_confirmed: true, s1_split: defaultSplit(), s4_outfit: { id: 99 } }
+    const back = loadSession(memoryStorage({ [KEY]: JSON.stringify(raw) }))
+    expect(back.session).not.toBeNull()
+    expect(back.discarded).toBe(false)
+    expect(back.session?.s4_outfit).toBeUndefined()
+    expect(back.session?.s1_confirmed).toBe(true)
+  })
+
+  it('s4_outfit 形状不对（没有 id）→ 只丢衣服字段', () => {
+    const KEY = 'jieyang.taosu.save'
+    const raw = { schemaVersion: 2, id: 'x', s1_confirmed: false, s1_split: defaultSplit(), s4_outfit: { key: 'tshirt' } }
+    const back = loadSession(memoryStorage({ [KEY]: JSON.stringify(raw) }))
+    expect(back.session?.s4_outfit).toBeUndefined()
+  })
+
+  it('s5_dried 非布尔（如字符串 "yes"）→ 只丢标记，整局保留', () => {
+    const KEY = 'jieyang.taosu.save'
+    const raw = { schemaVersion: 2, id: 'x', s1_confirmed: false, s1_split: defaultSplit(), s5_dried: 'yes' }
+    const back = loadSession(memoryStorage({ [KEY]: JSON.stringify(raw) }))
+    expect(back.session?.s5_dried).toBeUndefined()
+    expect(back.session).not.toBeNull()
+  })
+
+  it('脱掉衣服（无 s4 字段）的档重载后仍是脱掉状态', () => {
+    const store = memoryStorage()
+    const s = wearOutfit(wearOutfit(newSession('run-4', defaultSplit()), 1), 0)
+    expect(s.s4_outfit).toBeUndefined()
+    writeSession(s, store)
+    const back = loadSession(store)
+    expect(back.session?.s4_outfit).toBeUndefined()
+    expect(back.session).toEqual(s)
   })
 })
 

@@ -2,6 +2,7 @@ import { SCHEMA_VERSION, type GameSession, type Part, type ShapeState, type Shap
 import { isValidSplit } from '../sim/split'
 import { SHAPE_PARTS, clampShapeValue, shapeSliders } from '../sim/shape'
 import { decodeGlaze, encodeGlaze } from './glazeCodec'
+import { isValidOutfitId } from '../sim/outfit'
 
 const KEY = 'jieyang.taosu.save'
 
@@ -84,6 +85,14 @@ function sanitize(raw: unknown): GameSession | null {
     // s2_shape 是后来加的阶段：旧存档没有它就补默认，不算坏档。有它则逐项修复（夹取 / 补中性）。
     s2_shape: sanitizeShape(d.s2_shape),
   }
+  // ④ 衣服是可选字段：旧档（拆泥阶段存的）没有它，不算坏档。id 不在数据表里 → 只丢衣服，保留整局。
+  const outfit = d.s4_outfit
+  if (outfit != null) {
+    const id = (outfit as Record<string, unknown>).id
+    if (isValidOutfitId(id) && id !== 0) session.s4_outfit = { id }
+  }
+  // ⑤ 阴干同理：非布尔值不认，只丢标记。
+  if (typeof d.s5_dried === 'boolean') session.s5_dried = d.s5_dried
   // 釉层缺失（拆泥阶段的存档）或解不出来：退回「还没上釉」，不把整局判成坏档——
   // 前面拆泥捏塑的进度比一层可重涂的釉值钱。
   const glaze = decodeGlaze(d.s6_glaze)
