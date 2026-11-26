@@ -211,6 +211,29 @@ button {
   cursor: pointer;
 }
 
+/* 捏阶段的全局操作（上一步 / 从头再来）：固定在右上角，抽屉打开时也压在上面 */
+.stage-head .stage-actions {
+  pointer-events: auto;
+  position: fixed;
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  right: 16px;
+  display: flex;
+  gap: 8px;
+}
+
+.stage-head .stage-actions button {
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius: 999px;
+}
+
+@media (max-width: 699px) {
+  .stage-head .stage-actions {
+    position: static;
+    margin-top: 10px;
+  }
+}
+
 button.ghost {
   background: transparent;
   border-color: rgba(232, 224, 212, 0.4);
@@ -235,4 +258,107 @@ button:disabled {
   .split-panel { padding: 12px; border-radius: 14px; }
   .split-track { height: 56px; }
   .split-seg { font-size: 12px; }
+}
+
+/* ─── 捏：右侧滑杆抽屉 ─── */
+
+.shape-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(320px, 86vw);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  border-left: 1px solid var(--stroke);
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+  box-shadow: -18px 0 40px rgba(0, 0, 0, 0.45);
+  transform: translateX(102%);
+  visibility: hidden;
+  pointer-events: none;
+  transition: transform 0.32s cubic-bezier(0.2, 0.9, 0.2, 1), visibility 0.32s;
+}
+
+.shape-drawer.is-open {
+  transform: translateX(0);
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.shape-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.shape-drawer-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+}
+
+.shape-drawer-head button {
+  min-height: 36px;
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+.shape-drawer-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.shape-sliders {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 4px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  touch-action: pan-y;
+}
+
+.shape-sliders li label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.shape-sliders input[type="range"] {
+  width: 100%;
+  height: 32px;
+  accent-color: var(--accent);
+  touch-action: pan-y;
+}
+
+@media (max-width: 699px) {
+  .shape-drawer {
+    top: auto;
+    left: 0;
+    width: 100%;
+    max-height: 52vh;
+    border-left: 0;
+    border-top: 1px solid var(--stroke);
+    border-radius: 18px 18px 0 0;
+    transform: translateY(102%);
+    box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.45);
+  }
+
+  .shape-drawer.is-open {
+    transform: translateY(0);
+  }
+
+  .shape-sliders {
+    max-height: 34vh;
+  }
 }

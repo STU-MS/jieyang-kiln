@@ -7,12 +7,19 @@ import { clampDivider, PARTS, toDividers, toSplit } from '../sim/split'
 
 type Phase = 'idle' | 'playing' | 'done'
 
-/** 拆泥阶段 ①：一团泥 + 四段滑杆 + 确认 → 拆分动画。 */
-export function SplitStage() {
+/**
+ * 拆泥阶段 ①：一团泥 + 四段滑杆 + 确认 → 拆分动画。
+ * `mergeOnEnter`：从捏阶段退回来时，先把四块泥倒放合并回一整团（同一套时间轴，p 取反）。
+ */
+export function SplitStage({
+  onSplitDone,
+  mergeOnEnter = false,
+}: { onSplitDone?: () => void; mergeOnEnter?: boolean } = {}) {
   const { session, canSave, discarded } = useSession()
-  const [phase, setPhase] = useState<Phase>(session.s1_confirmed ? 'done' : 'idle')
+  const [phase, setPhase] = useState<Phase>(mergeOnEnter ? 'playing' : session.s1_confirmed ? 'done' : 'idle')
+  const [merging, setMerging] = useState(mergeOnEnter)
   const rigRef = useRef<ClayRig | null>(null)
-  const animRef = useRef({ running: false, t: 0 })
+  const animRef = useRef({ running: false, t: 0, merge: false })
   const split = session.s1_split
 
   useStudio((studio) => {
@@ -25,15 +32,32 @@ export function SplitStage() {
     if (snapshot.s1_confirmed) rig.showChunks()
     else rig.showWhole()
 
+    // 从捏退回来：接着「刚分完」的画面，倒放合并回去。触发只认 mergeOnEnter——
+    // 上一步时 s1_confirmed 已经清掉了，再拿它当条件动画就没了。
+    if (mergeOnEnter) {
+      rig.poseSplit(1)
+      animRef.current = { running: true, t: 0, merge: true }
+    }
+
     studio.frame = (dt) => {
       if (!animRef.current.running) return
       animRef.current.t += dt
-      const p = Math.min(1, animRef.current.t / SPLIT_SECONDS)
-      rig.poseSplit(p)
-      if (p >= 1) {
+      const raw = Math.min(1, animRef.current.t / SPLIT_SECONDS)
+      const merge = animRef.current.merge
+      rig.poseSplit(merge ? 1 - raw : raw)
+      if (raw >= 1) {
         animRef.current.running = false
+        if (merge) {
+          rig.showWhole()
+          store.reopen()
+          store.flush()
+          setMerging(false)
+          setPhase('idle')
+          return
+        }
         rig.showChunks()
         setPhase('done')
+        onSplitDone?.()
       }
     }
 
@@ -59,12 +83,11 @@ export function SplitStage() {
 
   function reopen() {
     if (phase !== 'done') return
-    // 重分：泥团合回一整坨，滑杆恢复可拖，比例保留
+    // 重分：倒放合并回去（同一套时间轴取反），滑杆合完再放开，比例保留
     store.reopen()
-    animRef.current = { running: false, t: 0 }
-    rigRef.current?.setSplit(store.get().session.s1_split)
-    rigRef.current?.showWhole()
-    setPhase('idle')
+    animRef.current = { running: true, t: 0, merge: true }
+    setMerging(true)
+    setPhase('playing')
   }
 
   function confirm() {
@@ -74,7 +97,8 @@ export function SplitStage() {
     const rig = rigRef.current
     if (!rig) return
     rig.setSplit(store.get().session.s1_split)
-    animRef.current = { running: true, t: 0 }
+    animRef.current = { running: true, t: 0, merge: false }
+    setMerging(false)
     setPhase('playing')
   }
 
@@ -106,7 +130,7 @@ export function SplitStage() {
           )}
           {phase === 'playing' && (
             <button type="button" disabled>
-              {t('split.splitting')}
+              {merging ? t('split.merging') : t('split.splitting')}
             </button>
           )}
           {phase === 'done' && (

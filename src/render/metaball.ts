@@ -28,6 +28,11 @@ export interface BlobConfig {
    * 世界半径 = 2 · extent · fieldRadius · share^(1/3)，体积随占比线性。
    */
   readonly fieldRadius: number
+  /**
+   * 三角形预算（默认 8 万）。MarchingCubes 到这个数就静默停止写三角形，
+   * 表面会缺一块（看起来像破洞）——球多、散开时要给够。
+   */
+  readonly maxPolyCount?: number
 }
 
 export interface ClayBlob {
@@ -42,11 +47,12 @@ export interface ClayBlob {
 /** 势场球的势场常数：只要求 isolation 与 subtract 相等，合并距离就只由半径决定。 */
 const ISOLATION = 1
 
-/** 多边形的最大数量：四颗球在 64 分辨率下大约 3 万个三角面。 */
-const MAX_POLY_COUNT = 80000
+/** 默认多边形预算：四颗球在 64 分辨率下大约 3 万个三角面。 */
+const DEFAULT_MAX_POLY_COUNT = 80000
 
 export function createClayBlob(material: THREE.Material, cfg: BlobConfig): ClayBlob {
-  const mesh = new MarchingCubes(cfg.resolution, material, true, false, MAX_POLY_COUNT)
+  const maxPolyCount = cfg.maxPolyCount ?? DEFAULT_MAX_POLY_COUNT
+  const mesh = new MarchingCubes(cfg.resolution, material, true, false, maxPolyCount)
   mesh.scale.set(cfg.extent, cfg.extent * cfg.squash, cfg.extent)
   mesh.castShadow = true
   mesh.receiveShadow = true
@@ -58,6 +64,7 @@ export function createClayBlob(material: THREE.Material, cfg: BlobConfig): ClayB
   const toLocalRadius = (world: number): number => world / (2 * cfg.extent)
 
   let alpha = 1
+  let warned = false
 
   const blob: ClayBlob = {
     mesh,
@@ -67,6 +74,7 @@ export function createClayBlob(material: THREE.Material, cfg: BlobConfig): ClayB
         addBall(x: number, y: number, z: number, strength: number, subtract: number): void
         update(): void
         isolation: number
+        count: number
       }
       field.isolation = ISOLATION
       field.reset()
@@ -77,6 +85,11 @@ export function createClayBlob(material: THREE.Material, cfg: BlobConfig): ClayB
         field.addBall(toLocal(ball.x), toLocalY(ball.y), toLocal(ball.z), 2 * ISOLATION * r * r, ISOLATION)
       }
       field.update()
+      // 三角形被预算截断时，表面会没一块（破洞）。只报一次，方便定位是预算不够而不是几何算错。
+      if (!warned && field.count >= maxPolyCount) {
+        warned = true
+        console.warn('[blob] 三角形超出预算被截断：', field.count, '>=', maxPolyCount)
+      }
       applyAlpha()
     },
     setOpacity(next) {

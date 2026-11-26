@@ -21,6 +21,9 @@ const ANIM = data.animation
 /** 拆分动画时长（秒）。 */
 export const SPLIT_SECONDS = 1.6
 
+/** 拆分动画的节奏表（fit / travel / stagger / swap / swapFade）：出生动画倒放用同一套，别另配一份。 */
+export const SPLIT_ANIM = ANIM
+
 /** 湿泥色（设计文档 §2.5：深、略有反光）。阴干后换干坯色是另一阶段的事。 */
 export const WET_CLAY = clayData.tint
 
@@ -38,6 +41,8 @@ export interface ClayRig {
   showWhole(): void
   /** 显示四块停在工位 / 隐藏整团（读档恢复 S1） */
   showChunks(): void
+  /** 某一部位泥块的显隐：出生动画开始后泥块让位给部位网格 */
+  setChunkVisible(part: Part, visible: boolean): void
   /**
    * 拆分动画某一帧的姿态，p ∈ [0,1]（节奏见数据表 animation）：
    * 四颗势场球从整团位置水平拉开，势场表面先融合成一整团、被拉长变细、
@@ -45,6 +50,22 @@ export interface ClayRig {
    */
   poseSplit(p: number): void
   dispose(): void
+}
+
+/** 某占比的泥块半径（与体积守恒公式一致）：捏阶段的势场出生动画从这个半径起步。 */
+export function chunkRadius(share: number): number {
+  const wholeVol = WHOLE.radius ** 2 * WHOLE.squash
+  const s = Math.cbrt((wholeVol * share) / (CHUNK.unitRadius ** 2 * CHUNK.squash))
+  return CHUNK.unitRadius * s
+}
+
+/**
+ * 某占比的泥块体积（扁球：横半径 chunkRadius，高 = 半径 × squash）。
+ * 部位显示尺寸由「这块泥的体积」反解，泥给多少，部位就有多大。
+ */
+export function chunkVolume(share: number): number {
+  const r = chunkRadius(share)
+  return (4 / 3) * Math.PI * r * r * (r * CHUNK.squash)
 }
 
 export interface ClayRigOptions {
@@ -55,7 +76,7 @@ export interface ClayRigOptions {
 export function createClayRig(opts: ClayRigOptions = {}): ClayRig {
   const group = new THREE.Group()
 
-  const wholeMat = clayMaterial()
+  const wholeMat = createClayMaterial()
   const whole = new THREE.Mesh(new THREE.SphereGeometry(WHOLE.radius, 48, 32), wholeMat)
   whole.castShadow = true
   whole.receiveShadow = true
@@ -64,7 +85,7 @@ export function createClayRig(opts: ClayRigOptions = {}): ClayRig {
   const chunks = {} as Record<Part, THREE.Mesh>
   const labels = {} as Record<Part, THREE.Sprite>
   for (const part of PARTS) {
-    const m = new THREE.Mesh(new THREE.SphereGeometry(CHUNK.unitRadius, 40, 28), clayMaterial())
+    const m = new THREE.Mesh(new THREE.SphereGeometry(CHUNK.unitRadius, 40, 28), createClayMaterial())
     m.castShadow = true
     m.receiveShadow = true
     m.visible = false
@@ -78,7 +99,7 @@ export function createClayRig(opts: ClayRigOptions = {}): ClayRig {
     }
   }
 
-  const blobMat = clayMaterial()
+  const blobMat = createClayMaterial()
   const BLOB = ANIM.blob
   const blob: ClayBlob = createClayBlob(blobMat, {
     resolution: BLOB.resolution,
@@ -149,6 +170,17 @@ export function createClayRig(opts: ClayRigOptions = {}): ClayRig {
         if (labels[p]) labels[p].visible = false
         setNoise(chunks[p].material as THREE.Material, 0)
       }
+    },
+    setChunkVisible(part, visible) {
+      const chunk = chunks[part]
+      if (!visible) {
+        chunk.visible = false
+        chunk.castShadow = false
+        if (labels[part]) labels[part].visible = false
+        return
+      }
+      fadeTo(chunk, 1)
+      if (labels[part]) labels[part].visible = true
     },
     showChunks() {
       whole.visible = false
@@ -234,7 +266,8 @@ function clayTexture(): THREE.Texture {
   return tex
 }
 
-function clayMaterial(): THREE.Material {
+/** 湿泥材质：拆泥与捏共用同一份（同一张贴图，颜色/粗糙度来自数据表）。 */
+export function createClayMaterial(): THREE.Material {
   const grain = clayData.grain
   const mat = new THREE.MeshStandardMaterial({
     color: WET_CLAY,

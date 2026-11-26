@@ -68,6 +68,8 @@ export function StudioScene({ children }: { children?: ReactNode }) {
     let last = performance.now()
     // URL 覆盖过相机位姿时不再按画幅自动摆位（调试用）
     let cameraPinned = false
+    // 右侧抽屉占宽：>0 时用视口偏移把主体让到左边
+    let sideInset = 0
 
     const resize = () => {
       if (!studio || !renderer) return
@@ -75,11 +77,19 @@ export function StudioScene({ children }: { children?: ReactNode }) {
       const h = host.clientHeight
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
       renderer.setSize(w, h)
-      if (cameraPinned) {
+      if (cameraPinned || studio.focused) {
+        // 聚焦时不动机位（正在绕着部位看），只更新画幅
         studio.camera.aspect = w / h
         studio.camera.updateProjectionMatrix()
       } else {
         frameCamera(studio.camera, w / h)
+      }
+      const inset = Math.min(sideInset, w * 0.55)
+      if (inset > 0) {
+        // 取画面右移一截的子窗口 → 主体看起来往左让开抽屉
+        studio.camera.setViewOffset(w, h, inset / 2, 0, w, h)
+      } else {
+        studio.camera.clearViewOffset()
       }
     }
 
@@ -88,6 +98,7 @@ export function StudioScene({ children }: { children?: ReactNode }) {
         // 单帧最多 0.1 秒：切后台再回来不追帧（拆分动画不会一瞬间跳完）
         const dt = Math.min(0.1, Math.max(0, (now - last) / 1000))
         last = now
+        studio.updateCamera(dt)
         studio.frame?.(dt, now / 1000)
         renderer.render(studio.scene, studio.camera)
       }
@@ -108,6 +119,11 @@ export function StudioScene({ children }: { children?: ReactNode }) {
         return
       }
       studio = loaded
+      studio.canvas = renderer.domElement
+      studio.setSideInset = (px: number) => {
+        sideInset = px
+        resize()
+      }
       const urlCam = readCameraFromUrl()
       if (urlCam) {
         cameraPinned = true

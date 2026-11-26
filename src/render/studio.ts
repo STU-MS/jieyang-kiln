@@ -11,6 +11,18 @@ export interface Studio {
   readonly tableTop: THREE.Vector3
   /** 每帧回调（在 render 之前），参数是本帧秒数 */
   frame: ((dt: number, now: number) => void) | null
+  /** 右侧被 UI 面板占掉的宽度（CSS 像素）：相机把主体往画面左边让，抽屉不压住模型 */
+  setSideInset(px: number): void
+  /** 渲染画布（点选泥块时做射线投射用）；由 StudioScene 注入 */
+  canvas: HTMLCanvasElement | null
+  /** 把镜头对准某个部位（center 世界坐标，radius 部位半径），duration 秒内平滑过去 */
+  focusOn(center: THREE.Vector3, radius: number, duration?: number): void
+  /** 回到拆泥 / 总览机位 */
+  releaseFocus(duration?: number): void
+  /** 是否已聚焦（拖动才旋转） */
+  readonly focused: boolean
+  /** 每帧推进镜头动画；由 StudioScene 的渲染循环调用 */
+  updateCamera(dt: number): void
   /** 释放 GPU 资源 */
   dispose(): void
 }
@@ -47,7 +59,13 @@ export async function createStudio(): Promise<Studio> {
 
   const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 50)
   camera.position.copy(CAMERA_POS)
-  camera.lookAt(CAMERA_LOOK)
+  const look = CAMERA_LOOK.clone()
+  camera.lookAt(look)
+
+  // 聚焦镜头：目标点 + 球坐标（绕部位转动）；anim 负责「转向 + 靠近」的补帧
+  let orbit: { target: THREE.Vector3; yaw: number; pitch: number; distance: number } | null = null
+  let anim: { fromPos: THREE.Vector3; fromLook: THREE.Vector3; toPos: THREE.Vector3; toLook: THREE.Vector3; t: number; duration: number } | null = null
+  let focused = false
 
   // 三点布光：主光暖、补光冷、半球环境
   const key = new THREE.DirectionalLight('#fff2e0', 2.2)
@@ -73,12 +91,67 @@ export async function createStudio(): Promise<Studio> {
   const room = await loadRoom()
   scene.add(room)
 
-  return {
+  const studio: Studio = {
     scene,
     camera,
     room,
     tableTop: TABLE_TOP.clone(),
     frame: null,
+    // StudioScene 拿到 renderer 后会覆盖成真正实现
+    setSideInset() {},
+    canvas: null,
+    focusOn(center, radius, duration = 0.55) {
+      // 保持当前视线方向（不跳变），只换目标点和距离：镜头先转向、再靠近
+      const dir = camera.position.clone().sub(center).normalize()
+      const yaw = Math.atan2(dir.x, dir.z)
+      // 视角放平：站着看工位上的部位，而不是从高处俯视
+      const pitch = 0.26
+      // 留一点桌面参照：不给下限的话小部位也会被怼满画面，看起来「偏大」
+      const distance = radius * 2.6 + 0.14
+      const to = new THREE.Vector3(
+        center.x + Math.sin(yaw) * Math.cos(pitch) * distance,
+        center.y + Math.sin(pitch) * distance,
+        center.z + Math.cos(yaw) * Math.cos(pitch) * distance,
+      )
+      anim = { fromPos: camera.position.clone(), fromLook: look.clone(), toPos: to, toLook: center.clone(), t: 0, duration }
+      orbit = { target: center.clone(), yaw, pitch, distance }
+      focused = true
+    },
+    releaseFocus(duration = 0.5) {
+      focused = false
+      orbit = null
+      anim = {
+        fromPos: camera.position.clone(),
+        fromLook: look.clone(),
+        toPos: CAMERA_POS.clone(),
+        toLook: CAMERA_LOOK.clone(),
+        t: 0,
+        duration,
+      }
+    },
+    updateCamera(dt) {
+      if (!anim) {
+        if (orbit) {
+          camera.position.set(
+            orbit.target.x + Math.sin(orbit.yaw) * Math.cos(orbit.pitch) * orbit.distance,
+            orbit.target.y + Math.sin(orbit.pitch) * orbit.distance,
+            orbit.target.z + Math.cos(orbit.yaw) * Math.cos(orbit.pitch) * orbit.distance,
+          )
+          look.copy(orbit.target)
+          camera.lookAt(look)
+        }
+        return
+      }
+      anim.t = Math.min(1, anim.t + dt / Math.max(anim.duration, 1e-3))
+      const k = anim.t * anim.t * (3 - 2 * anim.t)
+      camera.position.lerpVectors(anim.fromPos, anim.toPos, k)
+      look.lerpVectors(anim.fromLook, anim.toLook, k)
+      camera.lookAt(look)
+      if (anim.t >= 1) anim = null
+    },
+    get focused() {
+      return focused
+    },
     dispose() {
       scene.traverse((obj) => {
         const mesh = obj as THREE.Mesh
@@ -90,6 +163,7 @@ export async function createStudio(): Promise<Studio> {
       })
     },
   }
+  return studio
 }
 
 async function loadRoom(): Promise<THREE.Group> {
