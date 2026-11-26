@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
-import { newSession, type GameSession } from './types'
+import { newSession, type GameSession, type Part } from './types'
 import { defaultSplit } from '../sim/split'
+import { clampShapeValue, defaultShapeState } from '../sim/shape'
 import { loadSession, writeSession } from '../persist/storage'
 
 interface Snap {
@@ -65,6 +66,32 @@ export const store = {
     const s = boot()
     if (!s.session.s1_confirmed) return
     commit({ ...s.session, s1_confirmed: false })
+  },
+  /**
+   * 拖形态滑杆：只改内存、不落盘（拖一下写一次太密；退出部位 / 标记动画时落盘）。
+   * 传进来的值越界或非数字时夹到 [0,1]，非数字退回中性。
+   */
+  setShape(part: Part, sliderId: string, value: number): void {
+    const s = boot()
+    const shape = s.session.s2_shape
+    const next = {
+      ...shape,
+      [part]: { ...shape[part], [sliderId]: clampShapeValue(value) },
+    }
+    snap = { ...s, session: { ...s.session, s2_shape: next } }
+    emit()
+  },
+  /** 从头再来：四个部位回到初始泥块、滑杆全部回中性，落盘（不可撤销的那一次点击，UI 负责确认） */
+  resetShape(): void {
+    const s = boot()
+    commit({ ...s.session, s2_shape: defaultShapeState() })
+  },
+  /** 出生变形动画播完：标记该部位 animated 并落盘（幂等；会把当前内存里的滑杆值一并写下去） */
+  markAnimated(part: Part): void {
+    const s = boot()
+    const shape = s.session.s2_shape
+    if (shape.animated[part]) return
+    commit({ ...s.session, s2_shape: { ...shape, animated: { ...shape.animated, [part]: true } } })
   },
   /** 落盘当前内存态（页面隐藏时调用） */
   flush(): boolean {

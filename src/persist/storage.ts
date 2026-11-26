@@ -1,5 +1,6 @@
-import { SCHEMA_VERSION, type GameSession } from '../game/types'
+import { SCHEMA_VERSION, type GameSession, type Part, type ShapeState, type ShapeValues } from '../game/types'
 import { isValidSplit } from '../sim/split'
+import { SHAPE_PARTS, clampShapeValue, shapeSliders } from '../sim/shape'
 
 const KEY = 'jieyang.taosu.save'
 
@@ -71,5 +72,35 @@ function sanitize(raw: unknown): GameSession | null {
   if (typeof d.s1_confirmed !== 'boolean') return null
   // 比例不合法（有非数字 / 低于最小值 / 和不为 1）= 坏档。我们的写入方不会产出这种值，不修，直接新局。
   if (!isValidSplit(d.s1_split)) return null
-  return { schemaVersion: SCHEMA_VERSION, id: d.id, s1_confirmed: d.s1_confirmed, s1_split: { ...d.s1_split } }
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    id: d.id,
+    s1_confirmed: d.s1_confirmed,
+    s1_split: { ...d.s1_split },
+    // s2_shape 是后来加的阶段：旧存档没有它就补默认，不算坏档。有它则逐项修复（夹取 / 补中性）。
+    s2_shape: sanitizeShape(d.s2_shape),
+  }
+}
+
+function asRecord(raw: unknown): Record<string, unknown> {
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
+}
+
+/**
+ * 把存档里的 s2_shape 修成合法形态：每根滑杆必须是有限数、夹到 [0,1]，缺的 id 补中性，
+ * 多出来的 id 丢掉；animated 缺失或非布尔 → false。整体坏了（非对象）也只是退回全默认。
+ */
+function sanitizeShape(raw: unknown): ShapeState {
+  const d = asRecord(raw)
+  const animatedRaw = asRecord(d.animated)
+  const valuesOut = {} as Record<Part, ShapeValues>
+  const animated = {} as Record<Part, boolean>
+  for (const part of SHAPE_PARTS) {
+    const valuesRaw = asRecord(d[part])
+    const values: ShapeValues = {}
+    for (const slider of shapeSliders(part)) values[slider.id] = clampShapeValue(valuesRaw[slider.id])
+    valuesOut[part] = values
+    animated[part] = animatedRaw[part] === true
+  }
+  return { ...valuesOut, animated }
 }

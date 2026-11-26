@@ -1,0 +1,305 @@
+{
+  "version": 1,
+  "value": {
+    "min": 0,
+    "max": 1,
+    "neutral": 0.5
+  },
+  "parts": {
+    "head": {
+      "sliders": [
+        {
+          "id": "scale",
+          "text": "shape.head.scale",
+          "channels": [
+            {
+              "morph": "gen_head_scale",
+              "dir": 1
+            }
+          ]
+        },
+        {
+          "id": "faceWidth",
+          "text": "shape.head.faceWidth",
+          "channels": [
+            {
+              "morph": "face_jaw_width_incr",
+              "dir": 1
+            },
+            {
+              "morph": "face_jaw_width_decr",
+              "dir": -1
+            }
+          ]
+        },
+        {
+          "id": "cheek",
+          "text": "shape.head.cheek",
+          "channels": [
+            {
+              "morph": "gen_cheek_puff",
+              "dir": 1
+            }
+          ]
+        },
+        {
+          "id": "earSize",
+          "text": "shape.head.earSize",
+          "channels": [
+            {
+              "morph": "face_ear_size_incr",
+              "dir": 1
+            },
+            {
+              "morph": "face_ear_size_decr",
+              "dir": -1
+            }
+          ]
+        },
+        {
+          "id": "chin",
+          "text": "shape.head.chin",
+          "channels": [
+            {
+              "morph": "face_chin_incr",
+              "dir": 1
+            },
+            {
+              "morph": "face_chin_decr",
+              "dir": -1
+            }
+          ]
+        },
+        {
+          "id": "cheekbones",
+          "text": "shape.head.cheekbones",
+          "channels": [
+            {
+              "morph": "face_cheekbones_incr",
+              "dir": 1
+            },
+            {
+              "morph": "face_cheekbones_decr",
+              "dir": -1
+            }
+          ]
+        },
+        {
+          "id": "noseHeight",
+          "text": "shape.head.noseHeight",
+          "channels": [
+            {
+              "morph": "face_nose_height_incr",
+              "dir": 1
+            },
+            {
+              "morph": "face_nose_height_decr",
+              "dir": -1
+            }
+          ]
+        },
+        {
+          "id": "browTilt",
+          "text": "shape.head.browTilt",
+          "channels": [
+            {
+              "morph": "gen_brow_tilt",
+              "dir": 1
+            }
+          ]
+        },
+        {
+          "id": "eyeOpen",
+          "text": "shape.head.eyeOpen",
+          "channels": [
+            {
+              "morph": "blink_left",
+              "dir": 1
+            },
+            {
+              "morph": "blink_right",
+              "dir": 1
+            }
+          ]
+        },
+        {
+          "id": "mouthOpen",
+          "text": "shape.head.mouthOpen",
+          "channels": [
+            {
+              "morph": "face_lips_incr",
+              "dir": 1
+            },
+            {
+              "morph": "face_lips_decr",
+              "dir": -1
+            }
+          ]
+        }
+      ]
+    },
+    "body": {
+      "sliders": [
+        {
+          "id": "height",
+          "text": "shape.body.height",
+          "channels": [
+            {
+              "morph": "height_tall",
+              "dir": 1
+            },
+            {
+              "morph": "height_short",
+              "dir": -1
+            }
+          ]
+        },
+        {
+          "id": "weight",
+          "text": "shape.body.weight",
+          "channels": [
+            {
+              "morph": "weight_max",
+              "dir": 1
+            },
+            {
+              "morph": "weight_min",
+              "dir": -1
+            }
+          ]
+        },
+        {
+          "id": "muscle",
+          "text": "shape.body.muscle",
+          "channels": [
+            {
+              "morph": "muscle_max",
+              "dir": 1
+            },
+            {
+              "morph": "muscle_min",
+              "dir": -1
+            }
+          ]
+        },
+        {
+          "id": "shoulder",
+          "text": "shape.body.shoulder",
+          "channels": [
+            {
+              "morph": "gen_shoulder",
+              "dir": 1
+            }
+          ]
+        },
+        {
+          "id": "waist",
+          "text": "shape.body.waist",
+          "channels": [
+            {
+              "morph": "gen_waist",
+              "dir": 1
+            }
+          ]
+        }
+      ]
+    },
+    "arms": {
+      "sliders": [
+        {
+          "id": "length",
+          "text": "shape.arms.length",
+          "channels": [
+            {
+              "morph": "gen_arm_length",
+              "dir": 1
+            }
+          ]
+        },
+        {
+          "id": "thickness",
+          "text": "shape.arms.thickness",
+          "channels": [
+            {
+              "morph": "gen_arm_thickness",
+              "dir": 1
+            }
+          ]
+        },
+        {
+          "id": "handSize",
+          "text": "shape.arms.handSize",
+          "channels": [
+            {
+              "morph": "gen_hand_size",
+              "dir": 1
+            }
+          ]
+        }
+      ]
+    },
+    "legs": {
+      "sliders": [
+        {
+          "id": "length",
+          "text": "shape.legs.length",
+          "channels": [
+            {
+              "morph": "gen_leg_length",
+              "dir": 1
+            }
+          ]
+        },
+        {
+          "id": "thickness",
+          "text": "shape.legs.thickness",
+          "channels": [
+            {
+              "morph": "gen_leg_thickness",
+              "dir": 1
+            }
+          ]
+        },
+        {
+          "id": "footSize",
+          "text": "shape.legs.footSize",
+          "channels": [
+            {
+              "morph": "gen_foot_size",
+              "dir": 1
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "birth": {
+    "display": {
+      "scaleGain": 0.7
+    },
+    "fill": {
+      "perPart": 60,
+      "packing": 0.55,
+      "radiusRatio": 1.5,
+      "minRadius": 0.35,
+      "thicknessClamp": 0.55,
+      "insideInset": 0.3,
+      "staggerSpan": 0.32
+    },
+    "blob": {
+      "resolution": 44,
+      "fieldBias": 0.8,
+      "maxPolyCount": 220000
+    },
+    "timeline": {
+      "spread": [
+        0.06,
+        0.78
+      ],
+      "travel": [
+        0.4,
+        0.86
+      ]
+    }
+  }
+}

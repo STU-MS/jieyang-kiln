@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { newSession } from '../game/types'
+import { newSession, type GameSession } from '../game/types'
 import { defaultSplit } from '../sim/split'
+import { SHAPE_CENTER, SHAPE_PARTS, shapeSliders } from '../sim/shape'
 import { loadSession, writeSession, type StorageLike } from './storage'
 
 function memoryStorage(initial?: Record<string, string>): StorageLike & { dump: Record<string, string> } {
@@ -86,5 +87,101 @@ describe('存档：失败态', () => {
 
   it('localStorage 写抛错（隐私模式 / 配额满）→ 返回 false，不抛', () => {
     expect(writeSession(newSession('r', defaultSplit()), throwingWrite)).toBe(false)
+  })
+})
+
+describe('存档：② 捏（s2_shape）兼容与夹取', () => {
+  const KEY = 'jieyang.taosu.save'
+  const SPLIT = { head: 0.3, body: 0.3, arms: 0.15, legs: 0.25 }
+  /** 上一个版本写下的存档：只有 s1 的内容，没有 s2_shape。 */
+  const legacyV2 = () => JSON.stringify({ schemaVersion: 2, id: 'old-run', s1_confirmed: true, s1_split: SPLIT })
+
+  function expectAllNeutral(shape: GameSession['s2_shape']) {
+    for (const part of SHAPE_PARTS) {
+      const ids = shapeSliders(part).map((s) => s.id)
+      expect(Object.keys(shape[part]).sort()).toEqual([...ids].sort())
+      for (const id of ids) expect(shape[part][id]).toBe(SHAPE_CENTER)
+      expect(shape.animated[part]).toBe(false)
+    }
+  }
+
+  function loadRaw(raw: unknown) {
+    return loadSession(memoryStorage({ [KEY]: JSON.stringify(raw) }))
+  }
+
+  function withShape(s2_shape: unknown) {
+    return { schemaVersion: 2, id: 'run-shape', s1_confirmed: false, s1_split: SPLIT, s2_shape }
+  }
+
+  it('旧存档没有 s2_shape：补默认值（滑杆中性、动画未播），不判坏档', () => {
+    const back = loadSession(memoryStorage({ [KEY]: legacyV2() }))
+    expect(back.discarded).toBe(false)
+    expect(back.session?.id).toBe('old-run')
+    expect(back.session?.s1_confirmed).toBe(true)
+    expectAllNeutral(back.session!.s2_shape)
+  })
+
+  it('越界的滑杆值夹到 [0,1]，不判坏档', () => {
+    const part = 'legs'
+    const [a, b] = shapeSliders(part)
+    const raw = withShape({ [part]: { [a.id]: 1.8, [b.id]: -0.2 } })
+    const back = loadRaw(raw)
+    expect(back.discarded).toBe(false)
+    expect(back.session?.s2_shape[part][a.id]).toBe(1)
+    expect(back.session?.s2_shape[part][b.id]).toBe(0)
+    // 其他部位没给 → 默认值
+    expect(back.session?.s2_shape.head[shapeSliders('head')[0].id]).toBe(SHAPE_CENTER)
+  })
+
+  it('滑杆值是字符串 / 缺 id → 该滑杆退回中性，其他滑杆保留', () => {
+    const part = 'arms'
+    const [a, b] = shapeSliders(part)
+    const raw = withShape({ [part]: { [a.id]: '0.9' } })
+    const back = loadRaw(raw)
+    expect(back.discarded).toBe(false)
+    expect(back.session?.s2_shape[part][a.id]).toBe(SHAPE_CENTER)
+    expect(back.session?.s2_shape[part][b.id]).toBe(SHAPE_CENTER)
+    expect(back.session?.s2_shape[part]).not.toBeUndefined()
+  })
+
+  it('animated 缺失 / 非布尔 → 该部位按未播放；true 保留', () => {
+    const shape = withShape({ animated: { head: true, body: 'true', arms: 1 } })
+    const back = loadRaw(shape)
+    expect(back.discarded).toBe(false)
+    expect(back.session?.s2_shape.animated).toEqual({ head: true, body: false, arms: false, legs: false })
+  })
+
+  it('s2_shape 整体不是对象（字符串 / 数组 / 数字）→ 全默认，不判坏档', () => {
+    for (const bad of ['nope', [1, 2, 3], 42, null]) {
+      const back = loadRaw(withShape(bad))
+      expect(back.discarded).toBe(false)
+      expectAllNeutral(back.session!.s2_shape)
+    }
+  })
+
+  it('s2_shape 坏不影响 s1 的严格校验：s1_split 不合法仍拒收', () => {
+    const back = loadRaw({ schemaVersion: 2, id: 'x', s1_confirmed: false, s1_split: { head: 'a' }, s2_shape: 'nope' })
+    expect(back.session).toBeNull()
+    expect(back.discarded).toBe(true)
+  })
+
+  it('改过滑杆值与 animated 后写入再读出：数据逐字相同', () => {
+    const store = memoryStorage()
+    const headId = shapeSliders('head')[0].id
+    const legsId = shapeSliders('legs')[1].id
+    const base = newSession('run-shape', SPLIT)
+    const s: GameSession = {
+      ...base,
+      s2_shape: {
+        ...base.s2_shape,
+        head: { ...base.s2_shape.head, [headId]: 0.87 },
+        legs: { ...base.s2_shape.legs, [legsId]: 0 },
+        animated: { head: true, body: true, arms: true, legs: true },
+      },
+    }
+    expect(writeSession(s, store)).toBe(true)
+    const back = loadSession(store)
+    expect(back.discarded).toBe(false)
+    expect(back.session).toEqual(s)
   })
 })
