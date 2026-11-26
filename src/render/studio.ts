@@ -41,6 +41,19 @@ export function frameCamera(camera: THREE.PerspectiveCamera, aspect: number): vo
   camera.updateProjectionMatrix()
 }
 
+/** 视线方向（从目标点指向相机），复用默认位姿，保证换了焦距也不换机位角度。 */
+export const VIEW_DIR = CAMERA_POS.clone().sub(CAMERA_LOOK).normalize()
+
+/**
+ * 把相机推近到某个点，用于「捏 / 姿势」这类要看清小人的段落。
+ * 只改位置和朝向，不动 aspect。
+ */
+export function focusCamera(camera: THREE.PerspectiveCamera, target: THREE.Vector3, distance = 0.62): void {
+  camera.position.copy(target).addScaledVector(VIEW_DIR, distance)
+  camera.lookAt(target)
+  camera.updateProjectionMatrix()
+}
+
 export async function createStudio(): Promise<Studio> {
   const scene = new THREE.Scene()
   scene.background = new THREE.Color('#0e0c0a')

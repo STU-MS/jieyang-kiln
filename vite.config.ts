@@ -12,4 +12,18 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
+  server: {
+    // Windows 上某些编辑器「写临时文件再改名」的保存方式会让 chokidar 撞 EBUSY
+    // 直接崩掉 dev server（watch 到一个立刻消失的临时文件）。几种常见命名都忽略掉：
+    //   .name.ts.1234.uuid.tmpdir/  ·  name.ts~RF1234.TMP  ·  .~name.ts
+    watch: {
+      ignored: [
+        '**/*.tmpdir/**',
+        '**/*.tmpdir',
+        '**/*.{tmp,TMP}',
+        '**/*~RF*',
+        '**/.~*',
+      ],
+    },
+  },
 })

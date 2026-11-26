@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "note": "釉色表。生釉色是推断值（来源只给成品色），烧成色来自《揭阳陶塑_文化真相》里各作品的记载。raw = 涂上去看到的颜色，fired = 开窑后的颜色。",
+  "parts": ["head", "body", "arms", "legs"],
+  "glazes": [
+    { "id": "none", "label": "glaze.none", "raw": null, "fired": null },
+    { "id": "ash", "label": "glaze.ash", "raw": "#8f8d88", "fired": "#b4402f" },
+    { "id": "green", "label": "glaze.green", "raw": "#b39a5b", "fired": "#3f7d4e" },
+    { "id": "white", "label": "glaze.white", "raw": "#d8d4c8", "fired": "#efeae0" },
+    { "id": "aqua", "label": "glaze.aqua", "raw": "#c6ccc4", "fired": "#5aa79b" },
+    { "id": "graphite", "label": "glaze.graphite", "raw": "#4a3b2e", "fired": "#26221f" }
+  ]
+}
