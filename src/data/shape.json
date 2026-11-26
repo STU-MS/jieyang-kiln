@@ -284,21 +284,26 @@
       "minRadius": 0.35,
       "thicknessClamp": 0.55,
       "insideInset": 0.3,
-      "staggerSpan": 0.32
+      "staggerSpan": 0.32,
+      "shellDepth": 1.6
     },
     "blob": {
-      "resolution": 44,
+      "resolution": 56,
       "fieldBias": 0.8,
-      "maxPolyCount": 220000
+      "maxPolyCount": 260000
     },
     "timeline": {
-      "spread": [
+      "split": [
         0.06,
-        0.78
+        0.45
+      ],
+      "spread": [
+        0.45,
+        0.84
       ],
       "travel": [
-        0.4,
-        0.86
+        0.35,
+        0.88
       ]
     }
   }

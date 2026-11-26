@@ -100,8 +100,10 @@ interface PartSlot {
   readonly offset: THREE.Vector3
   /** 未缩放的包围盒半尺寸 */
   readonly halfExtent: number
-  /** 部位内部的填充球（相对包围盒中心、未缩放）：出生动画的终点，按离中心由近到远排序 */
-  readonly balls: readonly { x: number; y: number; z: number; radius: number }[]
+  /** 内部填充球按连通性分成的团（左右手臂各一团、头/身各一团），相对包围盒中心、未缩放 */
+  readonly clusters: readonly FillCluster[]
+  /** 所有填充球摊平（算包围盒用） */
+  readonly balls: readonly FillBall[]
   /** 包围盒中心离底面的高度（部位本地坐标）：势场球以这里为原点 */
   readonly lift: number
   /** 该部位自己的几何（共享顶点 + 本部位的索引）：算体积用 */
@@ -117,9 +119,25 @@ interface PartSlot {
   morphScale: number
   /** 当前朝向：拖动累积的偏航 / 俯仰 */
   turn: { yaw: number; pitch: number }
-  blob: ClayBlob | null
-  /** 势场方块的半边长（世界），缩放换算用 */
-  blobExtent: number
+  /** 每个网格岛一个独立势场（见 ClusterField） */
+  blobs: ClusterField[]
+}
+
+/** 一个网格岛对应的势场与它的团数据。 */
+interface ClusterField {
+  readonly blob: ClayBlob
+  /** 势场方块半边长（世界） */
+  readonly extent: number
+  /** 团质心（相对包围盒中心、未缩放） */
+  readonly cx: number
+  readonly cy: number
+  readonly cz: number
+  /** 这一团折成一颗球时的半径（未缩放） */
+  readonly radius: number
+  /** 团内成员（相对包围盒中心、未缩放） */
+  readonly balls: readonly FillBall[]
+  /** 团内合并补偿系数（成员全叠在质心时合成表面 = 团球） */
+  memberFit: number
 }
 
 export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
@@ -194,6 +212,9 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
       holder.add(mesh)
       group.add(holder)
 
+      const clusters = fillClusters(partGeo, idx, bounds, restVolume)
+      const flat = clusters.flatMap((c) => c.balls)
+
       slots[part] = {
         holder,
         mesh,
@@ -204,13 +225,13 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
         pivot: bounds.center.clone(),
         volume: restVolume,
         halfExtent: Math.max(bounds.half.x, bounds.half.y, bounds.half.z),
-        balls: fillBalls(partGeo, idx, bounds, restVolume),
+        clusters,
+        balls: flat,
         lift: bounds.center.y - bounds.min.y,
         displayScale: 1,
         morphScale: 1,
         turn: { yaw: 0, pitch: 0 },
-        blob: null,
-        blobExtent: 0,
+        blobs: [],
       }
     }
 
@@ -232,39 +253,61 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
       slot.holder.scale.setScalar(scale * slot.morphScale)
       slot.mesh.scale.setScalar(1)
       slot.mesh.position.set(-slot.offset.x, -slot.offset.y, -slot.offset.z)
-      if (slot.blob) {
-        slot.blob.dispose()
-        group.remove(slot.blob.mesh)
-        slot.blob = null
-      }
+      disposeBlobs(slot)
     }
   }
 
-  function ensureBlob(part: Part): PartSlot {
+  /** 每个网格岛建一个势场：手臂两团各一个，永远不会被势场连起来。 */
+  function ensureBlobs(part: Part): PartSlot {
     const slot = slots[part]
     if (!slot) throw new Error(`没有部位网格：${part}`)
-    if (slot.blob) return slot
-    // 势场盒子按球簇**真实**包围盒算：球心 + 半径，再留一点余量。
-    // 按部位尺寸估是不够的——球会顶出盒子，等值面在盒边被切断，破洞就是这么来的。
+    if (slot.blobs.length > 0) return slot
     const total = slot.holder.scale.x
-    let reach = chunkRadius(split[part])
-    for (const ball of slot.balls) {
-      reach = Math.max(reach, (Math.hypot(ball.x, ball.y, ball.z) + ball.radius) * total)
-    }
-    const extent = reach * 1.15
-    const blob = createClayBlob(createClayMaterial(), {
-      resolution: BLOB.resolution,
-      maxPolyCount: BLOB.maxPolyCount,
-      extent: Math.max(extent, 0.02),
-      squash: 1,
-      // 部位势场不用「按占比换算半径」那套（球半径直接由采样给出），这个值只占位
-      fieldRadius: 0.2,
+    slot.blobs = slot.clusters.map((cluster) => {
+      // 场盒子只要装得下这一团的成员，不必覆盖整个部位 → 细手臂也能拿到高分辨率
+      let reach = cluster.radius
+      for (const ball of cluster.balls) {
+        reach = Math.max(reach, Math.hypot(ball.x - cluster.cx, ball.y - cluster.cy, ball.z - cluster.cz) + ball.radius)
+      }
+      const extent = Math.max(reach * total, 0.02) * 1.2
+      const blob = createClayBlob(createClayMaterial(), {
+        resolution: BLOB.resolution,
+        maxPolyCount: BLOB.maxPolyCount,
+        extent,
+        squash: 1,
+        // 部位势场不用「按占比换算半径」那套（球半径直接由采样给出），这个值只占位
+        fieldRadius: 0.2,
+      })
+      blob.mesh.visible = false
+      group.add(blob.mesh)
+      return {
+        blob,
+        extent,
+        cx: cluster.cx,
+        cy: cluster.cy,
+        cz: cluster.cz,
+        radius: cluster.radius,
+        balls: cluster.balls,
+        memberFit: memberFitOf(cluster),
+      }
     })
-    blob.mesh.visible = false
-    group.add(blob.mesh)
-    slot.blob = blob
-    slot.blobExtent = extent
     return slot
+  }
+
+  /** 团内补偿：成员全叠在质心时，合成表面正好等于团球。 */
+  function memberFitOf(cluster: FillCluster): number {
+    const sumSq = cluster.balls.reduce((acc, b) => acc + b.radius * b.radius, 0)
+    const merged = Math.sqrt((2 * sumSq) / (cluster.balls.length + 1))
+    if (merged <= 1e-9) return 1
+    return Math.min(Math.max(cluster.radius / merged, 0.05), 3)
+  }
+
+  function disposeBlobs(slot: PartSlot): void {
+    for (const field of slot.blobs) {
+      field.blob.dispose()
+      group.remove(field.blob.mesh)
+    }
+    slot.blobs = []
   }
 
   const rig: PartRig = {
@@ -275,62 +318,69 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
       layout()
     },
     poseBirth(part, p) {
-      const slot = ensureBlob(part)
+      const slot = ensureBlobs(part)
       const t = clamp01(p)
       const mix = clamp01((t - ANIM.swap) / ANIM.swapFade)
-      const rise = eased(span(t, TL.travel[0], TL.travel[1])) // 整簇抬到部位高度
+      const splitK = eased(span(t, TL.split[0], TL.split[1])) // 一颗球 → 每岛一颗球
+      const rise = eased(span(t, TL.travel[0], TL.travel[1])) // 抬到部位高度
 
       const total = slot.holder.scale.x
       const r0 = chunkRadius(split[part])
-      const blob = slot.blob!
-      const extent = slot.blobExtent || blob.mesh.scale.x || 1 // 势场半边长（世界）：半径换算要用
-
-      // 竖向压扁：起点和泥块一致（0.72），抬升过程中回到正球，末段与真网格交接时已经不再扁
       const squash = CHUNK_SQUASH + (1 - CHUNK_SQUASH) * rise
-      blob.mesh.scale.set(extent, extent * squash, extent)
-      // 整簇中心：压扁后半径 = r0·squash，这样底部刚好贴桌；终点是部位中心。x/z 固定在工位
       const restY = r0 * squash
       const centerY = restY + (slot.lift * total - restY) * rise
-      blob.mesh.position.set(slot.holder.position.x, centerY, slot.holder.position.z)
 
-      const targets = slot.balls.map((ball) => ball.radius * total * BLOB.fieldBias)
-      const n = targets.length
-      // 合并补偿：n 颗球完全叠在一起时，势场表面半径 = √(2·Σr²/(n+1))，与拆泥 mergedFit 同一个式子。
-      // 反解出「叠成一团正好等于泥块半径」的系数 f0；散开过程中每颗球按自己的进度从 f0 回到 1。
-      let sumSq = 0
-      for (const r of targets) {
-        const local = r / (2 * extent)
-        sumSq += local * local
-      }
-      const mergedQ = Math.sqrt((2 * sumSq) / (n + 1))
-      const f0 = mergedQ > 1e-9 ? Math.min(Math.max(r0 / (2 * extent) / mergedQ, 0.05), 3) : 1
+      const fields = slot.blobs
+      // 各岛的团球半径（世界）
+      const radii = fields.map((f) => f.radius * total * BLOB.fieldBias)
+      const rMax = radii.reduce((a, b) => Math.max(a, b), 1e-6)
+      // 阶段 1：所有岛球叠在部位中心、统一按「合成后正好等于泥块半径」缩一圈
+      const shrink = Math.min(r0 / rMax, 1)
+      const fit = shrink + (1 - shrink) * splitK
 
-      // 一颗球同时「拆」和「移」：同一颗球的 k 同时驱动它的位置与半径补偿，
-      // 靠近中心的那批先离队，外缘的依次跟上——球体是被拉开、变细、断开的，不是先鼓起来再散开。
-      const span0 = TL.spread[0]
-      const window = Math.max(TL.spread[1] - span0, 1e-3)
-      const balls: BlobBall[] = []
-      for (let i = 0; i < n; i++) {
-        const ball = slot.balls[i]
-        const late = (i / Math.max(n - 1, 1)) * FILL.staggerSpan
-        const k = eased(span(t, span0 + late, Math.min(span0 + late + window * 0.75, TL.spread[1] + 0.05)))
-        const fit = f0 + (1 - f0) * k
-        balls.push({
-          x: ball.x * total * k,
-          y: ball.y * total * k,
-          z: ball.z * total * k,
-          radius: targets[i] * fit,
-        })
-      }
+      fields.forEach((field, i) => {
+        const blob = field.blob
+        const extent = field.extent
+        // 亚毫米级错位：两团的球在阶段 1 完全重合，不错开会出现共面闪烁（z-fighting）
+        const eps = 0.0006 * i
+        const ox = field.cx * total * splitK + eps
+        const oy = field.cy * total * splitK
+        const oz = field.cz * total * splitK + eps * 0.7
+        blob.mesh.position.set(slot.holder.position.x + ox, centerY + oy, slot.holder.position.z + oz)
+        blob.mesh.scale.set(extent, extent * squash, extent)
 
-      blob.update(balls)
-      blob.setOpacity(1 - mix)
+        const balls: BlobBall[] = []
+        const R = radii[i]
+        if (splitK < 0.999) {
+          // 只有团球：从部位中心沿自己质心方向拉开
+          if (R * fit > 1e-4) balls.push({ x: 0, y: 0, z: 0, radius: R * fit })
+        } else {
+          // 团内成员接手：全部先叠在团质心（合成表面 = 团球，交接无跳变），再边移动边长大
+          const span0 = TL.spread[0] + (i / Math.max(fields.length, 1)) * FILL.staggerSpan * 0.5
+          const end = Math.max(TL.spread[1], span0 + 0.05)
+          field.balls.forEach((b, j) => {
+            const late = (j / Math.max(field.balls.length - 1, 1)) * FILL.staggerSpan * 0.4
+            const k = eased(span(t, span0 + late, end))
+            const mFit = field.memberFit + (1 - field.memberFit) * k
+            balls.push({
+              x: (b.x - field.cx) * total * k,
+              y: (b.y - field.cy) * total * k,
+              z: (b.z - field.cz) * total * k,
+              radius: b.radius * total * BLOB.fieldBias * mFit,
+            })
+          })
+        }
+
+        blob.update(balls)
+        blob.setOpacity(1 - mix)
+      })
+
       fade(slot, mix)
     },
     showPart(part) {
       const slot = slots[part]
       if (!slot) return
-      slot.blob?.setOpacity(0)
+      for (const field of slot.blobs) field.blob.setOpacity(0)
       fade(slot, 1)
     },
     hitTest(raycaster) {
@@ -351,11 +401,7 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
       const slot = slots[part]
       if (!slot) return
       slot.mesh.visible = false
-      if (slot.blob) {
-        slot.blob.dispose()
-        group.remove(slot.blob.mesh)
-        slot.blob = null
-      }
+      disposeBlobs(slot)
     },
     frameOf(part) {
       const slot = slots[part]
@@ -382,8 +428,7 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
       for (const part of PARTS) {
         const slot = slots[part]
         if (!slot) continue
-        slot.blob?.dispose()
-        if (slot.blob) group.remove(slot.blob.mesh)
+        disposeBlobs(slot)
         slot.mesh.geometry.dispose()
         slot.material.dispose()
         group.remove(slot.holder)
@@ -795,12 +840,54 @@ interface Triangles {
   readonly nrm: Float32Array
   /** 每个三角形的包围盒：6 个数（min xyz、max xyz），用于快速剔除 */
   readonly box: Float32Array
+  /** 每个三角形属于哪个网格岛（左右手臂是两个岛） */
+  readonly island: Int32Array
   readonly count: number
+  readonly islandCount: number
+}
+
+/** 网格岛：部位是两个分离的壳（左右手臂 / 左右腿）时，靠连通性把它们分开。 */
+function meshIslands(idx: ArrayLike<number>, vertexCount: number): { triIsland: Int32Array; count: number } {
+  const parent = new Int32Array(vertexCount)
+  for (let i = 0; i < vertexCount; i++) parent[i] = i
+  const find = (i: number): number => {
+    while (parent[i] !== i) {
+      parent[i] = parent[parent[i]]
+      i = parent[i]
+    }
+    return i
+  }
+  const union = (a: number, b: number): void => {
+    const ra = find(a)
+    const rb = find(b)
+    if (ra !== rb) parent[rb] = ra
+  }
+  const tris = Math.floor(idx.length / 3)
+  for (let t = 0; t < tris; t++) {
+    const a = idx[t * 3]
+    const b = idx[t * 3 + 1]
+    const c = idx[t * 3 + 2]
+    union(a, b)
+    union(b, c)
+  }
+  const ids = new Map<number, number>()
+  const triIsland = new Int32Array(tris)
+  for (let t = 0; t < tris; t++) {
+    const root = find(idx[t * 3])
+    let id = ids.get(root)
+    if (id === undefined) {
+      id = ids.size
+      ids.set(root, id)
+    }
+    triIsland[t] = id
+  }
+  return { triIsland, count: ids.size }
 }
 
 function trianglesOf(geo: THREE.BufferGeometry, idx: ArrayLike<number>): Triangles {
   const attr = geo.attributes.position
   const count = Math.floor(idx.length / 3)
+  const islands = meshIslands(idx, attr.count)
   const pos = new Float32Array(count * 9)
   const nrm = new Float32Array(count * 3)
   const box = new Float32Array(count * 6)
@@ -826,11 +913,11 @@ function trianglesOf(geo: THREE.BufferGeometry, idx: ArrayLike<number>): Triangl
       t * 6,
     )
   }
-  return { pos, nrm, box, count }
+  return { pos, nrm, box, island: islands.triIsland, count, islandCount: islands.count }
 }
 
 /** 点到三角形表面最近距离 + 是否在实体内部（按最近面的外法线定向）。 */
-function nearestSurface(tris: Triangles, p: THREE.Vector3): { dist: number; inside: boolean } {
+function nearestSurface(tris: Triangles, p: THREE.Vector3): { dist: number; inside: boolean; tri: number } {
   let best = Infinity
   let bestT = -1
   for (let t = 0; t < tris.count; t++) {
@@ -847,13 +934,13 @@ function nearestSurface(tris: Triangles, p: THREE.Vector3): { dist: number; insi
       bestT = t
     }
   }
-  if (bestT < 0) return { dist: Infinity, inside: false }
+  if (bestT < 0) return { dist: Infinity, inside: false, tri: -1 }
   const n = bestT * 3
   // 最近点方向与面外法线的夹角 → 判定内外（局部凸性足够用，左右手臂各判各的，不会互相连）
   const i = bestT * 9
   const cp = closestPointOnTriangle(p, tris.pos[i], tris.pos[i + 1], tris.pos[i + 2], tris.pos[i + 3], tris.pos[i + 4], tris.pos[i + 5], tris.pos[i + 6], tris.pos[i + 7], tris.pos[i + 8])
   const inside = (p.x - cp.x) * tris.nrm[n] + (p.y - cp.y) * tris.nrm[n + 1] + (p.z - cp.z) * tris.nrm[n + 2] < 0
-  return { dist: Math.sqrt(best), inside }
+  return { dist: Math.sqrt(best), inside, tri: bestT }
 }
 
 function closestPointOnTriangle(p: THREE.Vector3, ax: number, ay: number, az: number, bx: number, by: number, bz: number, cx: number, cy: number, cz: number): THREE.Vector3 {
@@ -915,19 +1002,130 @@ function pointTriangleDistanceSq(p: THREE.Vector3, ax: number, ay: number, az: n
  * 只留实体内部的采样点，半径取「间距 × 比例」与「局部厚度 × 系数」的较小者。
  * 左右手臂之间的空档在网格之外，天然没有球——势场不会把两条手臂黏成蹼。
  */
-function fillBalls(
+function fillClusters(
   geo: THREE.BufferGeometry,
   idx: ArrayLike<number>,
   bounds: Bounds,
   volume: number,
-): { x: number; y: number; z: number; radius: number }[] {
+): FillCluster[] {
   // 间距由「部位体积 ÷ 目标球数 ÷ 填充率」反解：大部位球变少、球变大，小部位反之，总数始终封顶
   let spacing = Math.max(Math.cbrt(volume / Math.max(FILL.perPart, 1) / FILL.packing), 1e-4)
   const tris = trianglesOf(geo, idx)
-  // 太稀（可能被判成「都在外面」或者只剩几颗）就把网格加密再采一次，最多两轮
-  let out = sampleGrid(bounds, tris, spacing)
-  if (out.length < 8) out = sampleGrid(bounds, tris, spacing * 0.6)
-  return out.sort((a, b) => a.x * a.x + a.y * a.y + a.z * a.z - (b.x * b.x + b.y * b.y + b.z * b.z)).slice(0, FILL.perPart)
+  // 太稀（可能被判成「都在外面」或者只剩几颗）就把网格加密再采一次
+  let samples = sampleGrid(bounds, tris, spacing)
+  if (samples.length < 8) {
+    spacing *= 0.6
+    samples = sampleGrid(bounds, tris, spacing)
+  }
+
+  // 按「最近三角面所属的网格岛」分团：左右手臂是两个岛，永远不会被并成一团。
+  // 不用球间距离聚类——手臂垂在身侧时两臂空隙还没有球半径大，距离聚类一定会连起来。
+  const byIsland = new Map<number, { x: number; y: number; z: number; radius: number }[]>()
+  for (const s of samples) {
+    if (s.island < 0) continue
+    const list = byIsland.get(s.island)
+    const ball = { x: s.x, y: s.y, z: s.z, radius: s.radius }
+    if (list) list.push(ball)
+    else byIsland.set(s.island, [ball])
+  }
+
+  const islands = [...byIsland.values()].filter((list) => list.length >= 3)
+  const clusterOf = (list: FillBall[]): FillCluster => {
+    const c = centroid(list)
+    return { cx: c.x, cy: c.y, cz: c.z, radius: 0, balls: list }
+  }
+  let raw = islands.map(
+    (list) => ({ ...clusterOf(list), radius: Math.cbrt((3 * (volume * (list.length / Math.max(samples.length, 1)))) / (4 * Math.PI)) }),
+  )
+  // 只有「左右对称的两块」（手臂、腿）才真的分成两团。
+  // 头 / 身上偶尔也会切出多个岛（内壳、眼睛之类的碎片），那不是要分开摊开的东西，合回一团。
+  if (raw.length > 1 && !isMirrorPair(raw)) raw = [clusterOf(islands.flat())]
+  const clusters = raw.map(({ cx, cy, cz, balls }) => ({ cx, cy, cz, radius: 0, balls }))
+
+  const trimmed = trimClusters(clusters, FILL.perPart)
+  const total = trimmed.reduce((acc, c) => acc + c.balls.length, 0)
+  // 团球半径：把「这个部位分到的泥」按各团球数分给它。球之间重叠 ~50%，
+  // 直接把球体积相加会把团球放大两三倍（动画一开始就是一坨大球）。
+  return trimmed.map((c) => ({
+    ...c,
+    radius: Math.cbrt((3 * (volume * (c.balls.length / Math.max(total, 1)))) / (4 * Math.PI)),
+  }))
+}
+
+/** 一颗填充球（相对部位包围盒中心、未缩放） */
+interface FillBall {
+  readonly x: number
+  readonly y: number
+  readonly z: number
+  readonly radius: number
+}
+
+/** 一团填充球（一个网格岛）：出生动画里先折成一颗球，再摊开 */
+interface FillCluster {
+  /** 团质心（相对包围盒中心、未缩放） */
+  readonly cx: number
+  readonly cy: number
+  readonly cz: number
+  /** 这一团折成一颗球时的半径（未缩放） */
+  readonly radius: number
+  readonly balls: FillBall[]
+}
+
+/** 两块是不是镜像对称的一对（左右手臂 / 左右腿）：质心在 x 轴两侧、半径与球数相近。 */
+function isMirrorPair(clusters: readonly FillCluster[]): boolean {
+  if (clusters.length !== 2) return false
+  const [a, b] = clusters
+  const opposite = a.cx * b.cx < 0 && Math.abs(a.cx) > 0.03 && Math.abs(b.cx) > 0.03
+  if (!opposite) return false
+  const rm = Math.max(a.radius, b.radius)
+  const nm = Math.max(a.balls.length, b.balls.length)
+  return Math.abs(a.radius - b.radius) / rm < 0.3 && Math.abs(a.balls.length - b.balls.length) / nm < 0.4
+}
+
+/** 按各团体积（这里用球数近似）分配球数预算，保证左右手臂各拿各的份额。 */
+function trimClusters(clusters: FillCluster[], budget: number): FillCluster[] {
+  const totalBalls = clusters.reduce((acc, c) => acc + c.balls.length, 0)
+  if (totalBalls <= budget) return clusters.map(withCentroidSort)
+  return clusters.map((c) => {
+    const keep = Math.max(3, Math.round((budget * c.balls.length) / totalBalls))
+    const balls = c.balls.length <= keep ? c.balls : stride(c.balls, keep)
+    return withCentroidSort({ ...c, balls })
+  })
+}
+
+/** 等距抽样：保留覆盖范围，不偏向某一头。 */
+function stride(balls: readonly FillBall[], keep: number): FillBall[] {
+  const step = balls.length / keep
+  const out: FillBall[] = []
+  for (let i = 0; i < keep; i++) out.push(balls[Math.min(balls.length - 1, Math.floor(i * step))])
+  return out
+}
+
+/** 团内球按离团质心由近到远排好（展开时先中心后外缘）。 */
+function withCentroidSort(c: FillCluster): FillCluster {
+  const balls = [...c.balls].sort(
+    (a, b) =>
+      (a.x - c.cx) ** 2 + (a.y - c.cy) ** 2 + (a.z - c.cz) ** 2 -
+      ((b.x - c.cx) ** 2 + (b.y - c.cy) ** 2 + (b.z - c.cz) ** 2),
+  )
+  return { ...c, balls }
+}
+
+/** 球心按体积加权（用半径立方近似体积）。 */
+function centroid(balls: readonly FillBall[]): { x: number; y: number; z: number } {
+  let w = 0
+  let x = 0
+  let y = 0
+  let z = 0
+  for (const b of balls) {
+    const vol = b.radius ** 3
+    w += vol
+    x += b.x * vol
+    y += b.y * vol
+    z += b.z * vol
+  }
+  if (w <= 0) return { x: balls[0]?.x ?? 0, y: balls[0]?.y ?? 0, z: balls[0]?.z ?? 0 }
+  return { x: x / w, y: y / w, z: z / w }
 }
 
 /** 按给定间距在部位包围盒里打网格，采实体内部的点。 */
@@ -935,21 +1133,22 @@ function sampleGrid(
   bounds: Bounds,
   tris: Triangles,
   spacing: number,
-): { x: number; y: number; z: number; radius: number }[] {
-  const out: { x: number; y: number; z: number; radius: number }[] = []
+): { x: number; y: number; z: number; radius: number; island: number }[] {
+  const out: { x: number; y: number; z: number; radius: number; island: number }[] = []
   const p = new THREE.Vector3()
-  const limit = FILL.perPart * 2 // 去重前多采一些，最后再封顶
-  for (let x = bounds.min.x + spacing * 0.5; x < bounds.max.x && out.length < limit; x += spacing) {
-    for (let y = bounds.min.y + spacing * 0.5; y < bounds.max.y && out.length < limit; y += spacing) {
-      for (let z = bounds.min.z + spacing * 0.5; z < bounds.max.z && out.length < limit; z += spacing) {
+  // 注意：这里**不能**按扫描顺序截断预算。手臂是左右两块，x 扫描会先把一侧抽满，
+  // 另一侧一颗都采不到，聚类就只剩一团（动画看起来「缩成一坨」）。截断放到聚类之后按体积分。
+  for (let x = bounds.min.x + spacing * 0.5; x < bounds.max.x; x += spacing) {
+    for (let y = bounds.min.y + spacing * 0.5; y < bounds.max.y; y += spacing) {
+      for (let z = bounds.min.z + spacing * 0.5; z < bounds.max.z; z += spacing) {
         p.set(x, y, z)
         const hit = nearestSurface(tris, p)
         if (!hit.inside || hit.dist <= 0) continue
-        // 半径：间距与局部厚度（≈ 2 × 到表面距离）取小，最薄处也不缩成针尖
-        const radius = Math.max(
-          Math.min(spacing * FILL.radiusRatio, hit.dist * 2 * FILL.thicknessClamp),
-          spacing * FILL.minRadius,
-        )
+        // 只采「贴着表面的一层壳」。部位是按骨骼切开的开口网格，切面外法线会朝里，
+        // 深处的点会被误判成内部（手臂会把两臂之间的躯干也填满）——壳层离表面近，误判区采不到。
+        if (hit.dist > spacing * FILL.shellDepth) continue
+        // 半径：球半径与间距挂钩，最薄处也不缩成针尖
+        const radius = Math.max(Math.min(spacing * FILL.radiusRatio, hit.dist * 2), spacing * FILL.minRadius)
         // 球心要够靠里，球才不会冒出表面
         if (hit.dist < radius * FILL.insideInset) continue
         // 同一个位置只留一颗：叠球会让势场过强、表面鼓包
@@ -965,7 +1164,13 @@ function sampleGrid(
           }
         }
         if (crowded) continue
-        out.push({ x: x - bounds.center.x, y: y - bounds.center.y, z: z - bounds.center.z, radius })
+        out.push({
+          x: x - bounds.center.x,
+          y: y - bounds.center.y,
+          z: z - bounds.center.z,
+          radius,
+          island: hit.tri >= 0 ? tris.island[hit.tri] : -1,
+        })
       }
     }
   }
