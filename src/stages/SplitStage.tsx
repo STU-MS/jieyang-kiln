@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { f, t } from '../content/text'
 import { store, useSession } from '../game/session'
+import type { Split } from '../game/types'
 import { createClayRig, SPLIT_SECONDS, type ClayRig } from '../render/clay'
 import { useStudio } from '../render/StudioScene'
 import { clampDivider, PARTS, toDividers, toSplit } from '../sim/split'
@@ -8,7 +9,7 @@ import { clampDivider, PARTS, toDividers, toSplit } from '../sim/split'
 type Phase = 'idle' | 'playing' | 'done'
 
 /** 拆泥阶段 ①：一团泥 + 四段滑杆 + 确认 → 拆分动画。 */
-export function SplitStage() {
+export function SplitStage({ onDone }: { onDone?: (split: Split) => void }) {
   const { session, canSave, discarded } = useSession()
   const [phase, setPhase] = useState<Phase>(session.s1_confirmed ? 'done' : 'idle')
   const rigRef = useRef<ClayRig | null>(null)
@@ -114,7 +115,7 @@ export function SplitStage() {
               <button type="button" className="ghost" onClick={reopen}>
                 {t('split.redo')}
               </button>
-              <button type="button" disabled>
+              <button type="button" onClick={() => onDone?.(split)}>
                 {t('split.next')}
               </button>
             </>

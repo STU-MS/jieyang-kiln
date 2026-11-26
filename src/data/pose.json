@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "note": "五个姿势预设。角度单位是度，[x,y,z] 欧拉角，作用在各自关节上。hip = 胯部高度系数（1 = 站立高度）。",
+  "presets": {
+    "stand": {
+      "hip": 1,
+      "torso": [0, 0, 0],
+      "shoulderL": [0, 0, -10],
+      "shoulderR": [0, 0, 10],
+      "elbowL": [0, 0, 0],
+      "elbowR": [0, 0, 0],
+      "thighL": [0, 0, 3],
+      "thighR": [0, 0, -3],
+      "kneeL": [0, 0, 0],
+      "kneeR": [0, 0, 0]
+    },
+    "sit": {
+      "hip": 0.52,
+      "torso": [4, 0, 0],
+      "shoulderL": [-20, 0, -8],
+      "shoulderR": [-20, 0, 8],
+      "elbowL": [-35, 0, 0],
+      "elbowR": [-35, 0, 0],
+      "thighL": [-78, 0, 6],
+      "thighR": [-78, 0, -6],
+      "kneeL": [80, 0, 0],
+      "kneeR": [80, 0, 0]
+    },
+    "lean": {
+      "hip": 0.97,
+      "torso": [2, 0, 10],
+      "shoulderL": [0, 0, -14],
+      "shoulderR": [0, 0, 62],
+      "elbowL": [0, 0, 0],
+      "elbowR": [-10, 0, 30],
+      "thighL": [0, 0, 8],
+      "thighR": [0, 0, -2],
+      "kneeL": [4, 0, 0],
+      "kneeR": [0, 0, 0]
+    },
+    "kneel": {
+      "hip": 0.55,
+      "torso": [6, 0, 0],
+      "shoulderL": [-10, 0, -10],
+      "shoulderR": [-10, 0, 10],
+      "elbowL": [-15, 0, 0],
+      "elbowR": [-15, 0, 0],
+      "thighL": [15, 0, 5],
+      "thighR": [15, 0, -5],
+      "kneeL": [115, 0, 0],
+      "kneeR": [115, 0, 0]
+    },
+    "crossLeg": {
+      "hip": 0.36,
+      "torso": [3, 0, 0],
+      "shoulderL": [-15, 0, -18],
+      "shoulderR": [-15, 0, 18],
+      "elbowL": [-30, 0, 0],
+      "elbowR": [-30, 0, 0],
+      "thighL": [-22, 0, 52],
+      "thighR": [-22, 0, -52],
+      "kneeL": [10, 0, -100],
+      "kneeR": [10, 0, 100]
+    }
+  }
+}

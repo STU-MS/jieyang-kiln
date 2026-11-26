@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "note": "极简版小人：几何体拼装，不用 MakeHuman 网格。数值单位是米，站在桌面原点。比例按「头高 ≈ 全身 1/5.5」定，滑杆拉满也不至于头比身子大。",
+  "color": "#8a5f43",
+  "rig": {
+    "headR": 0.032,
+    "torsoH": 0.14,
+    "torsoR": 0.05,
+    "armLen": 0.155,
+    "armR": 0.019,
+    "legLen": 0.165,
+    "legR": 0.026
+  },
+  "shareWeight": 0.22,
+  "shareClamp": [0.85, 1.15],
+  "sliders": [
+    { "id": "headSize", "part": "head", "label": "shape.slider.headSize", "min": 0.8, "max": 1.2, "default": 1 },
+    { "id": "headWidth", "part": "head", "label": "shape.slider.headWidth", "min": 0.85, "max": 1.15, "default": 1 },
+    { "id": "bodyHeight", "part": "body", "label": "shape.slider.bodyHeight", "min": 0.85, "max": 1.2, "default": 1 },
+    { "id": "bodyGirth", "part": "body", "label": "shape.slider.bodyGirth", "min": 0.8, "max": 1.25, "default": 1 },
+    { "id": "armLen", "part": "arms", "label": "shape.slider.armLen", "min": 0.75, "max": 1.25, "default": 1 },
+    { "id": "armThick", "part": "arms", "label": "shape.slider.armThick", "min": 0.8, "max": 1.25, "default": 1 },
+    { "id": "legLen", "part": "legs", "label": "shape.slider.legLen", "min": 0.8, "max": 1.25, "default": 1 },
+    { "id": "legThick", "part": "legs", "label": "shape.slider.legThick", "min": 0.8, "max": 1.25, "default": 1 }
+  ]
+}
