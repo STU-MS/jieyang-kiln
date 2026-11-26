@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "value": {
     "min": 0,
     "max": 1,
@@ -276,6 +276,29 @@
   "birth": {
     "display": {
       "scaleGain": 0.7
+    },
+    "pose": {
+      "comment": "工位朝向：先绕世界 Y 转 yaw（度）让正面朝摄像机，再绕世界 Z 转 lie（度）躺到桌上。focusPitch 是聚焦该部位时的俯角（度）：立着的头小一点，平躺的身/手/脚大一点。",
+      "yaw": 90,
+      "seatClearance": 0.002,
+      "parts": {
+        "head": {
+          "lie": 0,
+          "focusPitch": 18
+        },
+        "body": {
+          "lie": 90,
+          "focusPitch": 46
+        },
+        "arms": {
+          "lie": 90,
+          "focusPitch": 46
+        },
+        "legs": {
+          "lie": 90,
+          "focusPitch": 46
+        }
+      }
     },
     "fill": {
       "perPart": 60,

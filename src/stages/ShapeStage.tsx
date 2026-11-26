@@ -131,7 +131,7 @@ export function ShapeStage({ onBack }: { onBack: () => void }) {
       if (!part) return
       focusRef.current = part
       const frame = parts.frameOf(part)
-      if (frame) studio.focusOn(frame.center, frame.radius)
+      if (frame) studio.focusOn(frame.center, frame.radius, frame.pitch)
       const s = store.get().session
       if (s.s2_shape.animated[part]) {
         parts.showPart(part)

@@ -33,6 +33,7 @@ export const BIRTH_SECONDS = SPLIT_SECONDS
 const DISPLAY = BIRTH.display
 const FILL = BIRTH.fill
 const BLOB = BIRTH.blob
+const POSE = BIRTH.pose
 const TL = BIRTH.timeline
 /** 拆泥动画的节奏表：出生动画倒着用同一份（fit / travel / stagger / swap / swapFade） */
 const ANIM = SPLIT_ANIM
@@ -87,7 +88,7 @@ export interface PartRig {
   /** 收起某部位（回到泥块状态）：网格与势场球都藏起来 */
   hidePart(part: Part): void
   /** 该部位在画面里的中心与半径（世界坐标）：镜头聚焦用 */
-  frameOf(part: Part): { center: THREE.Vector3; radius: number } | null
+  frameOf(part: Part): { center: THREE.Vector3; radius: number; pitch: number } | null
   dispose(): void
 }
 
@@ -98,6 +99,8 @@ interface PartSlot {
   readonly material: THREE.MeshStandardMaterial
   /** 部位几何在原始网格坐标里的中心（x、z）与最低点（y），用于把部件摆到工位 */
   readonly offset: THREE.Vector3
+  /** 这个部位自己的包围盒（只算自己的三角形，不是整张模型的） */
+  readonly bounds: Bounds
   /** 未缩放的包围盒半尺寸 */
   readonly halfExtent: number
   /** 内部填充球按连通性分成的团（左右手臂各一团、头/身各一团），相对包围盒中心、未缩放 */
@@ -121,6 +124,14 @@ interface PartSlot {
   turn: { yaw: number; pitch: number }
   /** 每个网格岛一个独立势场（见 ClusterField） */
   blobs: ClusterField[]
+  /** 工位朝向：先绕世界 Y 转 yaw 让正面朝摄像机，再绕世界 Z 转 lie 躺到桌上 */
+  readonly pose: THREE.Quaternion
+  /** 聚焦这个部位时的俯角（弧度）：平躺的部件要大一点才看得见正面 */
+  readonly focusPitch: number
+  /** 朝向定下来之后，让部位最低点贴住桌面的竖直位移（holder 局部） */
+  seatY: number
+  /** 工位在桌面上的水平位置（出生动画的球从这里长出来） */
+  readonly station: THREE.Vector2
 }
 
 /** 一个网格岛对应的势场与它的团数据。 */
@@ -220,6 +231,7 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
         mesh,
         material,
         offset,
+        bounds,
         geometry: partGeo,
         index: idx,
         pivot: bounds.center.clone(),
@@ -232,10 +244,50 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
         morphScale: 1,
         turn: { yaw: 0, pitch: 0 },
         blobs: [],
+        pose: poseOf(part),
+        focusPitch: (POSE.parts[part].focusPitch * Math.PI) / 180,
+        seatY: 0,
+        station: new THREE.Vector2(STATIONS[part][0], STATIONS[part][1]),
       }
     }
 
     layout()
+  }
+
+  /**
+   * 朝向定下来后让部位最低点贴住桌面。
+   * 必须用「这个部位自己的包围盒」——四个部位共享同一份 position 属性，
+   * three 的 Box3.setFromObject 取的是几何体整体包围盒（整张模型），会算错几十厘米。
+   */
+  function seat(slot: PartSlot): void {
+    slot.holder.position.y = 0
+    group.updateMatrixWorld(true)
+    const box = boxOf(slot)
+    // 贴桌留一点余量：躺下的部位背面正好和桌面共面会 z-fighting，表面会碎成一块块
+    slot.seatY = group.position.y - box.min.y + POSE.seatClearance
+    slot.holder.position.y = slot.seatY
+    group.updateMatrixWorld(true)
+  }
+
+  /** 部位包围盒放到世界坐标（用部位自己的 bounds × 当前变换）。 */
+  function boxOf(slot: PartSlot): THREE.Box3 {
+    // 用 mesh 的世界矩阵（holder 变换 × 网格自身 −offset 平移），包围盒才对得上渲染位置
+    return new THREE.Box3(slot.bounds.min.clone(), slot.bounds.max.clone()).applyMatrix4(slot.mesh.matrixWorld)
+  }
+
+  /** 工位朝向：先绕世界 Y 转 yaw（正面朝摄像机），再绕世界 Z 转 lie（躺到桌上）。 */
+  function poseOf(part: Part): THREE.Quaternion {
+    const lie = (POSE.parts[part]?.lie ?? 0) * THREE.MathUtils.DEG2RAD
+    const yaw = POSE.yaw * THREE.MathUtils.DEG2RAD
+    const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw)
+    const qLie = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), lie)
+    return qLie.multiply(qYaw)
+  }
+
+  /** 拖动累积的朝向（在工位朝向上再叠一层）。 */
+  function dragQuat(slot: PartSlot): THREE.Quaternion {
+    const e = new THREE.Euler(slot.turn.pitch, slot.turn.yaw, 0)
+    return new THREE.Quaternion().setFromEuler(e)
   }
 
   /** 拆泥占比 → 显示缩放与工位摆放。部位体积随占比变，泥多的那条胳膊就是粗。 */
@@ -247,12 +299,13 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
       // 体积对应：这块泥的体积 = 部位显示体积 → 缩放 = (泥块体积 / 部位体积)^(1/3)
       const scale = DISPLAY.scaleGain * Math.cbrt(chunkVolume(share) / Math.max(slot.volume, 1e-9))
       slot.displayScale = scale
-      const [x, z] = STATIONS[part]
-      slot.holder.position.set(x, 0, z)
+      slot.holder.position.set(slot.station.x, 0, slot.station.y)
+      slot.holder.quaternion.copy(slot.pose).multiply(dragQuat(slot))
       // 缩放挂在 holder 上：部位自己的偏移量不变，形变补偿也只是乘一个标量
       slot.holder.scale.setScalar(scale * slot.morphScale)
       slot.mesh.scale.setScalar(1)
       slot.mesh.position.set(-slot.offset.x, -slot.offset.y, -slot.offset.z)
+      seat(slot)
       disposeBlobs(slot)
     }
   }
@@ -263,11 +316,15 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
     if (!slot) throw new Error(`没有部位网格：${part}`)
     if (slot.blobs.length > 0) return slot
     const total = slot.holder.scale.x
+    const rot = new THREE.Matrix4().makeRotationFromQuaternion(slot.pose)
     slot.blobs = slot.clusters.map((cluster) => {
       // 场盒子只要装得下这一团的成员，不必覆盖整个部位 → 细手臂也能拿到高分辨率
       let reach = cluster.radius
       for (const ball of cluster.balls) {
-        reach = Math.max(reach, Math.hypot(ball.x - cluster.cx, ball.y - cluster.cy, ball.z - cluster.cz) + ball.radius)
+        const local = new THREE.Vector3(ball.x - cluster.cx, ball.y - cluster.cy, ball.z - cluster.cz)
+          .applyMatrix4(rot)
+          .multiplyScalar(total)
+        reach = Math.max(reach, local.length() + ball.radius * total)
       }
       const extent = Math.max(reach * total, 0.02) * 1.2
       const blob = createClayBlob(createClayMaterial(), {
@@ -322,37 +379,40 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
       const t = clamp01(p)
       const mix = clamp01((t - ANIM.swap) / ANIM.swapFade)
       const splitK = eased(span(t, TL.split[0], TL.split[1])) // 一颗球 → 每岛一颗球
-      const rise = eased(span(t, TL.travel[0], TL.travel[1])) // 抬到部位高度
+      const rise = eased(span(t, TL.travel[0], TL.travel[1])) // 抬到工位、按工位朝向躺好
 
       const total = slot.holder.scale.x
       const r0 = chunkRadius(split[part])
+      // 竖向压扁始终是世界竖直方向：起点与桌面泥块一致（0.72），抬升中回到正球
       const squash = CHUNK_SQUASH + (1 - CHUNK_SQUASH) * rise
       const restY = r0 * squash
-      const centerY = restY + (slot.lift * total - restY) * rise
+      const lift = slot.lift * total
+      const rot = new THREE.Matrix4().makeRotationFromQuaternion(slot.pose)
+      // 部位自身坐标（相对包围盒中心）→ 组坐标：先按工位朝向转（正面朝摄像机、身/手/脚躺平），再落到工位
+      const anchor = new THREE.Vector3(slot.station.x, slot.seatY, slot.station.y)
+      const toGroup = (x: number, y: number, z: number): THREE.Vector3 =>
+        new THREE.Vector3(x, y + lift, z).applyMatrix4(rot).add(anchor)
+      // 起点：工位上还没抬起来的那颗扁球
+      const start = new THREE.Vector3(slot.station.x, restY, slot.station.y)
 
       const fields = slot.blobs
-      // 各岛的团球半径（世界）
       const radii = fields.map((f) => f.radius * total * BLOB.fieldBias)
       const rMax = radii.reduce((a, b) => Math.max(a, b), 1e-6)
-      // 阶段 1：所有岛球叠在部位中心、统一按「合成后正好等于泥块半径」缩一圈
+      // 阶段 1：各团的球叠在部位中心，统一缩到「合成后正好等于泥块半径」
       const shrink = Math.min(r0 / rMax, 1)
       const fit = shrink + (1 - shrink) * splitK
 
       fields.forEach((field, i) => {
         const blob = field.blob
         const extent = field.extent
-        // 亚毫米级错位：两团的球在阶段 1 完全重合，不错开会出现共面闪烁（z-fighting）
-        const eps = 0.0006 * i
-        const ox = field.cx * total * splitK + eps
-        const oy = field.cy * total * splitK
-        const oz = field.cz * total * splitK + eps * 0.7
-        blob.mesh.position.set(slot.holder.position.x + ox, centerY + oy, slot.holder.position.z + oz)
+        // 团球沿「自己质心的方向」从部位中心拉开（躺下以后就是朝各自该去的位置铺开）
+        const target = toGroup(field.cx * total * splitK, field.cy * total * splitK, field.cz * total * splitK)
+        blob.mesh.position.copy(start).lerp(target, rise)
         blob.mesh.scale.set(extent, extent * squash, extent)
 
         const balls: BlobBall[] = []
         const R = radii[i]
         if (splitK < 0.999) {
-          // 只有团球：从部位中心沿自己质心方向拉开
           if (R * fit > 1e-4) balls.push({ x: 0, y: 0, z: 0, radius: R * fit })
         } else {
           // 团内成员接手：全部先叠在团质心（合成表面 = 团球，交接无跳变），再边移动边长大
@@ -361,11 +421,15 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
           field.balls.forEach((b, j) => {
             const late = (j / Math.max(field.balls.length - 1, 1)) * FILL.staggerSpan * 0.4
             const k = eased(span(t, span0 + late, end))
+            // 成员在「团质心」坐标系里散开，同样按工位朝向转过去
+            const local = new THREE.Vector3(b.x - field.cx, b.y - field.cy, b.z - field.cz)
+              .applyMatrix4(rot)
+              .multiplyScalar(total * k)
             const mFit = field.memberFit + (1 - field.memberFit) * k
             balls.push({
-              x: (b.x - field.cx) * total * k,
-              y: (b.y - field.cy) * total * k,
-              z: (b.z - field.cz) * total * k,
+              x: local.x,
+              y: local.y,
+              z: local.z,
               radius: b.radius * total * BLOB.fieldBias * mFit,
             })
           })
@@ -395,7 +459,8 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
       if (!slot) return
       slot.turn.yaw += dx * 0.01
       slot.turn.pitch = THREE.MathUtils.clamp(slot.turn.pitch + dy * 0.01, -0.3, 0.55)
-      slot.holder.rotation.set(slot.turn.pitch, slot.turn.yaw, 0)
+      slot.holder.quaternion.copy(slot.pose).multiply(dragQuat(slot))
+      seat(slot)
     },
     hidePart(part) {
       const slot = slots[part]
@@ -406,9 +471,13 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
     frameOf(part) {
       const slot = slots[part]
       if (!slot) return null
-      const scale = slot.holder.scale.x
-      const center = slot.holder.position.clone().add(new THREE.Vector3(0, slot.lift * scale, 0)).add(group.position)
-      return { center, radius: slot.halfExtent * scale }
+      group.updateMatrixWorld(true)
+      const box = boxOf(slot)
+      return {
+        center: box.getCenter(new THREE.Vector3()),
+        radius: box.getSize(new THREE.Vector3()).length() / 2,
+        pitch: slot.focusPitch,
+      }
     },
     setWeights(part, weights) {
       const slot = slots[part]

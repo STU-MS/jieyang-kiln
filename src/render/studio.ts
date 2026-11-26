@@ -1,6 +1,10 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { assetId } from '../assets/manifest'
+import shapeData from '../data/shape.json'
+
+/** 默认聚焦俯角（弧度）：调用方没给时用 */
+const FOCUS_PITCH = (shapeData.birth.pose.parts.body.focusPitch * Math.PI) / 180
 
 /** 工作室场景：完整的室内房间，相机看向中央木桌。 */
 export interface Studio {
@@ -16,7 +20,7 @@ export interface Studio {
   /** 渲染画布（点选泥块时做射线投射用）；由 StudioScene 注入 */
   canvas: HTMLCanvasElement | null
   /** 把镜头对准某个部位（center 世界坐标，radius 部位半径），duration 秒内平滑过去 */
-  focusOn(center: THREE.Vector3, radius: number, duration?: number): void
+  focusOn(center: THREE.Vector3, radius: number, pitch?: number, duration?: number): void
   /** 回到拆泥 / 总览机位 */
   releaseFocus(duration?: number): void
   /** 是否已聚焦（拖动才旋转） */
@@ -100,12 +104,11 @@ export async function createStudio(): Promise<Studio> {
     // StudioScene 拿到 renderer 后会覆盖成真正实现
     setSideInset() {},
     canvas: null,
-    focusOn(center, radius, duration = 0.55) {
+    focusOn(center, radius, pitch = FOCUS_PITCH, duration = 0.55) {
       // 保持当前视线方向（不跳变），只换目标点和距离：镜头先转向、再靠近
       const dir = camera.position.clone().sub(center).normalize()
       const yaw = Math.atan2(dir.x, dir.z)
-      // 视角放平：站着看工位上的部位，而不是从高处俯视
-      const pitch = 0.26
+      // 俯角：平躺的部件视角太浅只看得到侧边；由调用方按部位给（立着的头小、躺着的身体大）
       // 留一点桌面参照：不给下限的话小部位也会被怼满画面，看起来「偏大」
       const distance = radius * 2.6 + 0.14
       const to = new THREE.Vector3(
