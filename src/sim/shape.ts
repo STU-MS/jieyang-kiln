@@ -22,6 +22,28 @@ export interface ShapeSlider {
 }
 
 export const SHAPE_PARTS: readonly Part[] = ['head', 'body', 'arms', 'legs']
+
+/** 工位摆放参数（`birth.pose`）：模型正面朝摄像机、身 / 手 / 脚仰面平躺。 */
+export interface PartPose {
+  /** 绕世界 Z 的躺平角度（度），0 = 直立 */
+  readonly lie: number
+  /** 聚焦该部位时的俯角（度） */
+  readonly focusPitch: number
+}
+
+const POSE_DATA = shape.birth.pose as unknown as { yaw: number; parts: Record<Part, PartPose> }
+
+/** 全部部位共用：绕世界 Y 让模型正面（+Z）对准摄像机 */
+export function poseYaw(): number {
+  return POSE_DATA.yaw
+}
+
+/** 某个部位在工位上的摆放：躺平角度与聚焦俯角（度）。缺表就是数据错，直接抛。 */
+export function poseOf(part: Part): PartPose {
+  const pose = POSE_DATA.parts[part]
+  if (!pose) throw new Error(`shape.json 的 birth.pose.parts 缺 ${part}`)
+  return pose
+}
 /** 滑杆中心：值 = 中心 → 默认形状，所有 morph 权重为 0 */
 export const SHAPE_CENTER = shape.value.neutral
 export const SHAPE_MIN = shape.value.min

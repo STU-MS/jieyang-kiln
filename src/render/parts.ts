@@ -5,6 +5,7 @@ import shapeData from '../data/shape.json'
 import splitData from '../data/split.json'
 import type { Part, Split } from '../game/types'
 import { PARTS } from '../sim/split'
+import { poseOf, poseYaw } from '../sim/shape'
 import { chunkRadius, chunkVolume, createClayMaterial, SPLIT_ANIM, SPLIT_SECONDS } from './clay'
 import { createClayBlob, type BlobBall, type ClayBlob } from './metaball'
 
@@ -33,8 +34,9 @@ export const BIRTH_SECONDS = SPLIT_SECONDS
 const DISPLAY = BIRTH.display
 const FILL = BIRTH.fill
 const BLOB = BIRTH.blob
-const POSE = BIRTH.pose
 const CAP = BIRTH.cap
+/** 贴桌余量：躺下的部位背面与桌面共面会 z-fighting，表面会碎成一块块 */
+const SEAT_CLEARANCE = BIRTH.pose.seatClearance
 const TL = BIRTH.timeline
 /** 拆泥动画的节奏表：出生动画倒着用同一份（fit / travel / stagger / swap / swapFade） */
 const ANIM = SPLIT_ANIM
@@ -263,8 +265,8 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
         morphScale: 1,
         turn: { yaw: 0, pitch: 0 },
         blobs: [],
-        pose: poseOf(part),
-        focusPitch: (POSE.parts[part].focusPitch * Math.PI) / 180,
+        pose: poseQuatOf(part),
+        focusPitch: (poseOf(part).focusPitch * Math.PI) / 180,
         seatY: 0,
         station: new THREE.Vector2(STATIONS[part][0], STATIONS[part][1]),
       }
@@ -283,7 +285,7 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
     group.updateMatrixWorld(true)
     const box = boxOf(slot)
     // 贴桌留一点余量：躺下的部位背面正好和桌面共面会 z-fighting，表面会碎成一块块
-    slot.seatY = group.position.y - box.min.y + POSE.seatClearance
+    slot.seatY = group.position.y - box.min.y + SEAT_CLEARANCE
     slot.holder.position.y = slot.seatY
     group.updateMatrixWorld(true)
   }
@@ -295,9 +297,9 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
   }
 
   /** 工位朝向：先绕世界 Y 转 yaw（正面朝摄像机），再绕世界 Z 转 lie（躺到桌上）。 */
-  function poseOf(part: Part): THREE.Quaternion {
-    const lie = (POSE.parts[part]?.lie ?? 0) * THREE.MathUtils.DEG2RAD
-    const yaw = POSE.yaw * THREE.MathUtils.DEG2RAD
+  function poseQuatOf(part: Part): THREE.Quaternion {
+    const lie = poseOf(part).lie * THREE.MathUtils.DEG2RAD
+    const yaw = poseYaw() * THREE.MathUtils.DEG2RAD
     const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw)
     const qLie = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), lie)
     return qLie.multiply(qYaw)

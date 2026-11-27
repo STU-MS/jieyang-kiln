@@ -7,7 +7,9 @@ import {
   clampShapeValue,
   defaultShapeValues,
   morphWeights,
+  poseOf,
   poseUnlocked,
+  poseYaw,
   shapeSliders,
 } from './shape'
 
@@ -137,5 +139,25 @@ describe('捏：姿势解锁', () => {
     for (const missing of parts) {
       expect(poseUnlocked(withAnimated(parts.filter((p) => p !== missing)))).toBe(false)
     }
+  })
+})
+
+describe('捏：工位摆放数据（birth.pose）', () => {
+  it('四个部位都有摆放参数，躺平与俯角都在合理范围', () => {
+    for (const part of SHAPE_PARTS) {
+      const pose = poseOf(part)
+      // 躺平 -90~90 度之外就是翻过去了；聚焦俯角必须是能看见桌面的 0~90 度
+      expect(pose.lie).toBeGreaterThanOrEqual(-90)
+      expect(pose.lie).toBeLessThanOrEqual(90)
+      expect(pose.focusPitch).toBeGreaterThan(0)
+      expect(pose.focusPitch).toBeLessThan(90)
+    }
+    expect(poseYaw()).toBeGreaterThanOrEqual(-360)
+    expect(poseYaw()).toBeLessThanOrEqual(360)
+  })
+
+  it('头部保持直立，身 / 手 / 脚是躺平的（数据表口径，不写在代码里）', () => {
+    expect(poseOf('head').lie).toBe(0)
+    for (const part of ['body', 'arms', 'legs'] as const) expect(Math.abs(poseOf(part).lie)).toBe(90)
   })
 })
