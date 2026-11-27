@@ -34,6 +34,7 @@ const DISPLAY = BIRTH.display
 const FILL = BIRTH.fill
 const BLOB = BIRTH.blob
 const POSE = BIRTH.pose
+const CAP = BIRTH.cap
 const TL = BIRTH.timeline
 /** 拆泥动画的节奏表：出生动画倒着用同一份（fit / travel / stagger / swap / swapFade） */
 const ANIM = SPLIT_ANIM
@@ -200,9 +201,12 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
       // morph 的 delta 数组直接共享（四块部位用同一批 target，只是各自的索引不同）
       partGeo.morphAttributes = geo.morphAttributes
       partGeo.morphTargetsRelative = geo.morphTargetsRelative
-      partGeo.setIndex(new THREE.BufferAttribute(idx, 1))
+      const partIdx = idx
+      partGeo.setIndex(new THREE.BufferAttribute(partIdx, 1))
 
       const material = createClayMaterial() as THREE.MeshStandardMaterial
+      // 双面：没封上的切口（比如身体那条扭曲大环）看到的是泥色内壁，而不是穿到房间
+      if (CAP.innerSide) material.side = THREE.DoubleSide
       const mesh = new THREE.Mesh(partGeo, material)
       mesh.visible = false
       mesh.castShadow = true
@@ -213,17 +217,32 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
       }, {})
       mesh.morphTargetInfluences = new Array(names.length).fill(0)
 
-      const bounds = boundsOf(geo, idx)
+      const bounds = boundsOf(geo, partIdx)
       const offset = new THREE.Vector3(bounds.center.x, bounds.min.y, bounds.center.z)
       mesh.position.set(-offset.x, -offset.y, -offset.z)
       // 中性形变下的体积：显示尺寸与滑杆补偿都以它为基准
-      const restVolume = volumeOf(partGeo, idx, [] as unknown as ArrayLike<number>, bounds.center)
+      const restVolume = volumeOf(partGeo, partIdx, [] as unknown as ArrayLike<number>, bounds.center)
+
+      // 切口封口：部位是开口网格，不封的话侧面能看穿成空壳。封口面做成 mesh 的子对象，
+      // 变换 / 可见性 / 透明度全都跟着 mesh 走，morph 权重也共享同一个数组。
+      const capTris = CAP.enabled ? capCuts(geo, partIdx, CAP) : null
+      const capGeo = capTris ? buildCap(geo, capTris, CAP.lift) : null
+      if (capGeo) {
+        const capMesh = new THREE.Mesh(capGeo, material)
+        capMesh.morphTargetDictionary = mesh.morphTargetDictionary
+        capMesh.morphTargetInfluences = mesh.morphTargetInfluences
+        capMesh.castShadow = true
+        capMesh.receiveShadow = true
+        // 拾取只认部位主网格，封口面不参与
+        capMesh.raycast = () => {}
+        mesh.add(capMesh)
+      }
 
       const holder = new THREE.Group()
       holder.add(mesh)
       group.add(holder)
 
-      const clusters = fillClusters(partGeo, idx, bounds, restVolume)
+      const clusters = fillClusters(partGeo, partIdx, bounds, restVolume)
       const flat = clusters.flatMap((c) => c.balls)
 
       slots[part] = {
@@ -233,7 +252,7 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
         offset,
         bounds,
         geometry: partGeo,
-        index: idx,
+        index: partIdx,
         pivot: bounds.center.clone(),
         volume: restVolume,
         halfExtent: Math.max(bounds.half.x, bounds.half.y, bounds.half.z),
@@ -326,7 +345,10 @@ export function createPartRig(opts: { tableTop: THREE.Vector3 }): PartRig {
           .multiplyScalar(total)
         reach = Math.max(reach, local.length() + ball.radius * total)
       }
-      const extent = Math.max(reach * total, 0.02) * 1.2
+      // 场盒子还要装得下出生第一帧那颗球（半径 = 泥块半径）：球顶到盒壁时 marching cubes
+      // 在盒面处不闭合，表面会破洞（白洞）。ballHeadroom 是留给盒壁的余量。
+      const reachWorld = Math.max(reach * total, chunkRadius(split[part]) * BLOB.ballHeadroom, 0.02)
+      const extent = reachWorld * 1.2
       const blob = createClayBlob(createClayMaterial(), {
         resolution: BLOB.resolution,
         maxPolyCount: BLOB.maxPolyCount,
@@ -574,6 +596,219 @@ function splitTriangles(geo: THREE.BufferGeometry, partOfVertex: readonly Part[]
   const out = {} as Record<Part, Uint32Array>
   for (const part of PARTS) out[part] = new Uint32Array(lists[part])
   return out
+}
+
+/** 读顶点坐标的最小接口（普通 / 交错 BufferAttribute 都能用） */
+type CapSource = {
+  getX(i: number): number
+  getY(i: number): number
+  getZ(i: number): number
+}
+
+/** 取第 i 个顶点的坐标 */
+function vertexAt(src: CapSource, i: number, target: THREE.Vector3): THREE.Vector3 {
+  return target.set(src.getX(i), src.getY(i), src.getZ(i))
+}
+
+/** 试着封一段弧：共面就剖分，不共面就从中点劈成两半递归，直到每段都近似共面。 */
+function capChain(chain: number[], pos: CapSource, cfg: typeof CAP, out: number[]): void {
+  const tried = capOne(chain, pos)
+  if (tried && tried.ratio <= cfg.maxFaceRatio) {
+    out.push(...tried.faces)
+    return
+  }
+  // 已经小到不能再劈：宁可留个小口，也不吐重叠面（会穿出表面变亮片）
+  if (chain.length < Math.max(cfg.minLoopVerts, 3) * 2) return
+  const mid = chain.length >> 1
+  capChain(chain.slice(0, mid), pos, cfg, out)
+  capChain(chain.slice(mid), pos, cfg, out)
+}
+
+/** 把一段弧投影到最佳拟合平面、三角剖分，并返回「剖分面积 ÷ 投影多边形面积」。 */
+function capOne(chain: number[], pos: CapSource): { faces: number[]; ratio: number } | null {
+  if (chain.length < 3) return null
+  const p = new THREE.Vector3()
+  const nrm = new THREE.Vector3()
+  const centroid = new THREE.Vector3()
+  for (let i = 0; i < chain.length; i++) {
+    const a = vertexAt(pos, chain[i], new THREE.Vector3())
+    const b = vertexAt(pos, chain[(i + 1) % chain.length], new THREE.Vector3())
+    nrm.x += (a.y - b.y) * (a.z + b.z)
+    nrm.y += (a.z - b.z) * (a.x + b.x)
+    nrm.z += (a.x - b.x) * (a.y + b.y)
+    centroid.add(a)
+  }
+  centroid.divideScalar(chain.length)
+  if (nrm.lengthSq() < 1e-16) return null
+  nrm.normalize()
+  const u = new THREE.Vector3(1, 0, 0)
+  if (Math.abs(nrm.x) > 0.9) u.set(0, 1, 0)
+  u.crossVectors(nrm, u).normalize()
+  const v = new THREE.Vector3().crossVectors(nrm, u).normalize()
+  const flat = chain.map((vi) => {
+    vertexAt(pos, vi, p).sub(centroid)
+    return new THREE.Vector2(p.dot(u), p.dot(v))
+  })
+
+  let poly = 0
+  for (let i = 0; i < flat.length; i++) {
+    const a = flat[i]
+    const b = flat[(i + 1) % flat.length]
+    poly += a.x * b.y - b.x * a.y
+  }
+  poly = Math.abs(poly) / 2
+  if (poly < 1e-12) return null
+
+  // three 自带的 earcut 实现，不引新依赖
+  const tris = THREE.ShapeUtils.triangulateShape(flat, [])
+  let cap = 0
+  const faces: number[] = []
+  for (const [i0, i1, i2] of tris) {
+    const a = flat[i0]
+    const b = flat[i1]
+    const c = flat[i2]
+    cap += Math.abs((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)) / 2
+    faces.push(chain[i0], chain[i1], chain[i2])
+  }
+  return { faces, ratio: cap / poly }
+}
+
+/**
+ * 一条开边环常常是**几个口被短桥连成的链**（身体那条 354 点的大环就是 3 段），
+ * 整条投影必然自交。按「相邻顶点间距 > 中位边长 × chainGap」处断开成弧，
+ * 每段首尾连弦当闭合轮廓，各段独立封口——每段都近似共面，剖分不会跨出去。
+ */
+function splitLoop(loop: number[], geo: THREE.BufferGeometry, chainGap: number): number[][] {
+  if (loop.length < 6) return [loop]
+  const pos = geo.attributes.position
+  const a = new THREE.Vector3()
+  const b = new THREE.Vector3()
+  const gaps: number[] = []
+  for (let i = 0; i < loop.length; i++) {
+    a.fromBufferAttribute(pos, loop[i])
+    b.fromBufferAttribute(pos, loop[(i + 1) % loop.length])
+    gaps.push(a.distanceTo(b))
+  }
+  const median = [...gaps].sort((x, y) => x - y)[gaps.length >> 1]
+  const limit = median * chainGap
+  const chains: number[][] = [[loop[0]]]
+  for (let i = 1; i < loop.length; i++) {
+    if (gaps[i - 1] > limit) chains.push([loop[i]])
+    else chains[chains.length - 1].push(loop[i])
+  }
+  // 首尾本来相接就别断开
+  if (chains.length > 1 && gaps[loop.length - 1] <= limit) chains[0] = [...chains.pop()!, ...chains[0]]
+  return chains.filter((c) => c.length >= 3)
+}
+
+/**
+ * 切口封口：部位是按骨骼权重从整张皮上切下来的**开口**网格，切口处是空壳，从侧面能看进去。
+ * 做法是把「只被一个三角面用到的边」（开边）串成闭环，逐环投影到最佳拟合平面后三角剖分，
+ * 把剖出来的索引加回部位。
+ *
+ * 关键：封口面**只复用切口上已有的顶点**，一个顶点都不新增 —— 所以 morph target 自动跟着
+ * 封口面一起变形（M4 的滑杆不需要为它写任何绑定逻辑），也不多占一份 position / skin 内存。
+ */
+function capCuts(geo: THREE.BufferGeometry, idx: ArrayLike<number>, cfg: typeof CAP): number[] | null {
+  const vertexCount = geo.attributes.position.count
+  const triCount = Math.floor(idx.length / 3)
+  // 一条边如果只被一个三角面用到，它就是切口边。key 用 min*count+max 压成整数
+  const edges = new Map<number, number>()
+  const key = (a: number, b: number): number => (a < b ? a * vertexCount + b : b * vertexCount + a)
+  for (let t = 0; t < triCount; t++) {
+    const a = idx[t * 3]
+    const b = idx[t * 3 + 1]
+    const c = idx[t * 3 + 2]
+    for (const [u, v] of [[a, b], [b, c], [c, a]] as const) {
+      const k = key(u, v)
+      edges.set(k, (edges.get(k) ?? 0) + 1)
+    }
+  }
+
+  const adj = new Map<number, number[]>()
+  for (const [k, count] of edges) {
+    if (count !== 1) continue
+    const a = Math.floor(k / vertexCount)
+    const b = k % vertexCount
+    for (const [u, v] of [[a, b], [b, a]] as const) {
+      const list = adj.get(u)
+      if (list) list.push(v)
+      else adj.set(u, [v])
+    }
+  }
+
+  const loops: number[][] = []
+  const seen = new Set<number>()
+  for (const start of adj.keys()) {
+    if (seen.has(start)) continue
+    const loop = [start]
+    seen.add(start)
+    let cur = start
+    for (;;) {
+      const next = adj.get(cur)?.find((v) => !seen.has(v))
+      if (next === undefined) break
+      seen.add(next)
+      loop.push(next)
+      cur = next
+    }
+    if (loop.length >= Math.max(cfg.minLoopVerts, 3)) loops.push(...splitLoop(loop, geo, cfg.chainGap))
+  }
+  if (loops.length === 0) return null
+
+  const pos = geo.attributes.position
+  // 顶点 id 列表，每三个一组一个三角形
+  const tris: number[] = []
+  for (const chain of loops) capChain(chain, pos, cfg, tris)
+  return tris.length > 0 ? tris : null
+}
+
+/**
+ * 把封口三角形做成一个独立小网格。
+ *
+ * 不能直接拼进部位索引里复用皮肤顶点：皮肤顶点的法线朝外，封口面用了那套法线会被照成黑的
+ * （看起来还像洞）。这里复制用到的顶点、复制它们对应的 morph delta、自己重算法线。
+ * morph 的 delta 也复制了，所以拉滑杆时封口面跟皮肤一起动，不用额外绑定。
+ */
+function buildCap(geo: THREE.BufferGeometry, tris: readonly number[], lift: number): THREE.BufferGeometry | null {
+  const pos = geo.attributes.position
+  const nrm = geo.attributes.normal
+  const remap = new Map<number, number>()
+  const order: number[] = []
+  for (const v of tris) {
+    if (remap.has(v)) continue
+    remap.set(v, order.length)
+    order.push(v)
+  }
+  const count = order.length
+  if (count === 0) return null
+
+  // 顶点沿自己法线往内沉一点：封口面与皮肤共面会 z-fighting，边缘的锯齿也会闪
+  const position = new Float32Array(count * 3)
+  for (let i = 0; i < count; i++) {
+    const v = order[i]
+    position[i * 3] = pos.getX(v) - (nrm?.getX(v) ?? 0) * lift
+    position[i * 3 + 1] = pos.getY(v) - (nrm?.getY(v) ?? 0) * lift
+    position[i * 3 + 2] = pos.getZ(v) - (nrm?.getZ(v) ?? 0) * lift
+  }
+
+  const cap = new THREE.BufferGeometry()
+  cap.setAttribute('position', new THREE.BufferAttribute(position, 3))
+  cap.setIndex(tris.map((v) => remap.get(v)!))
+  // morph delta 照抄一份，顺序与部位网格的 morphTargetDictionary 一致
+  for (const [name, attr] of Object.entries(geo.morphAttributes)) {
+    const deltas = new Float32Array(count * 3)
+    const src = attr[0] as THREE.BufferAttribute
+    for (let i = 0; i < count; i++) {
+      const v = order[i]
+      deltas[i * 3] = src.getX(v)
+      deltas[i * 3 + 1] = src.getY(v)
+      deltas[i * 3 + 2] = src.getZ(v)
+    }
+    cap.morphAttributes[name] = [new THREE.BufferAttribute(deltas, 3)]
+  }
+  cap.morphTargetsRelative = geo.morphTargetsRelative
+  cap.computeVertexNormals()
+  return cap
 }
 
 interface Bounds {

@@ -300,6 +300,15 @@
         }
       }
     },
+    "cap": {
+      "comment": "切口封口：把部位的开边（只被一个三角面用到的边）串成环、投影到最佳拟合平面后三角剖分。封口面只复用切口已有顶点，morph 自动跟着变形。minLoopVerts 跳过太小的孔；maxFaceRatio 是「剖分面积 ÷ 投影多边形面积」的上限，超过说明环在投影平面上自交，剖出来是重叠的跨面三角形（会穿出表面变亮片），这种段不封；chainGap：一条开边环常是几个口被短桥连成的链，按「相邻顶点间距 > 中位边长 × chainGap」断开成弧，每段单独封。innerSide 让部位双面渲染，没封上的地方露出泥色内壁而不是穿帮。",
+      "enabled": true,
+      "innerSide": true,
+      "maxFaceRatio": 1.3,
+      "minLoopVerts": 3,
+      "chainGap": 2,
+      "lift": 0.0015
+    },
     "fill": {
       "perPart": 60,
       "packing": 0.55,
@@ -313,6 +322,7 @@
     "blob": {
       "resolution": 56,
       "fieldBias": 0.8,
+      "ballHeadroom": 1.15,
       "maxPolyCount": 260000
     },
     "timeline": {
